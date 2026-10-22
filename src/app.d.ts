@@ -14,3 +14,8 @@ declare global {
 }
 
 export {};
+
+/** Build-time isolation: server bundles never activate local database UI. */
+declare global {
+	const __ACCOUNTING_SERVER__: boolean;
+}

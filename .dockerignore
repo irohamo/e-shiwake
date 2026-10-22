@@ -1,0 +1,16 @@
+.git
+node_modules
+build
+.svelte-kit
+.env*
+secrets/**
+backups/**
+data/**
+*.db*
+*.sqlite*
+
+!src/lib/components/data/**
+
+build.log
+._*
+*.log

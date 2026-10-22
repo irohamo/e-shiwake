@@ -1,3 +1,9 @@
+> **OpenClaw Accounting fork — Phase 1**
+>
+> Local Modeは既存のIndexedDB/PWA、Server Modeは認証付きSvelteKit/SQLiteです。
+> Server Modeの起動・制約は [運用手順](docs/server-operations.md)、全体設計は [architecture](docs/architecture.md)、次の作業は [implementation-plan](docs/implementation-plan.md) を参照してください。
+> AI提案/承認、証憑migration、freee互換CSVはまだ未実装です。
+
 # e-shiwake（電子仕訳）
 
 フリーランス・個人事業主向けの仕訳帳 + 証憑管理 PWAアプリ

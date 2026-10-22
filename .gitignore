@@ -24,3 +24,10 @@ vite.config.ts.timestamp-*
 
 # Claudeの個人環境
 .claude/settings.local.json
+# Private accounting data and credentials
+/data/
+/backups/
+/secrets/
+*.sqlite*
+*.db
+*.db-*

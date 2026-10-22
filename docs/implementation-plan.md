@@ -4,8 +4,8 @@
 
 - [x] upstream/旧AI版の構造・再利用・危険な同期構成を調査
 - [x] 設計・移行計画を記録
-- [ ] upstreamテストbaseline → Storage契約・SQLite/API/Auth → Server UI → Compose
-- [ ] 単体・API・複数ブラウザ・永続化・Local build回帰の検証結果を追記
+- [x] upstreamテストbaseline → Storage契約・SQLite/API/Auth → Server UI → Compose
+- [x] 単体・API・複数ブラウザ・永続化・Local build/PWAオフライン回帰を検証（`docs/verification.md`）
 
 ## Phase 2
 

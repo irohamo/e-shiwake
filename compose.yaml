@@ -1,0 +1,40 @@
+services:
+  accounting:
+    build: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      ORIGIN: ${ORIGIN:?Set the Tailscale HTTPS origin}
+      ACCOUNTING_DB_PATH: /data/accounting.sqlite
+      ACCOUNTING_PASSWORD_HASH_FILE: /run/secrets/owner_password_hash
+      BODY_SIZE_LIMIT: 131072
+    volumes:
+      - accounting-data:/data
+    secrets:
+      - owner_password_hash
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/login/').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+secrets:
+  owner_password_hash:
+    file: ./secrets/owner-password.hash
+volumes:
+  accounting-data:

@@ -56,6 +56,7 @@
 	const isHelpPage = $derived($page.route.id?.startsWith('/help') ?? false);
 
 	onMount(() => {
+		if (__ACCOUNTING_SERVER__) return;
 		// テーマを初期化
 		initializeTheme();
 
@@ -229,82 +230,86 @@
 	{@html webManifest}
 </svelte:head>
 
-<Sidebar.Provider>
-	<AppSidebar />
-	<Sidebar.Inset>
-		<AppHeader />
-		<div class="flex min-h-0 flex-1 items-start">
-			<main class="min-w-0 flex-1 p-4">
-				{@render children()}
-			</main>
-			<!-- デスクトップ用 AI チャット ドッキングパネル（開くと本体が横縮小） -->
-			<ChatDock />
-		</div>
-	</Sidebar.Inset>
-</Sidebar.Provider>
+{#if __ACCOUNTING_SERVER__}
+	<main class="mx-auto max-w-6xl p-4 sm:p-8">{@render children()}</main>
+{:else}
+	<Sidebar.Provider>
+		<AppSidebar />
+		<Sidebar.Inset>
+			<AppHeader />
+			<div class="flex min-h-0 flex-1 items-start">
+				<main class="min-w-0 flex-1 p-4">
+					{@render children()}
+				</main>
+				<!-- デスクトップ用 AI チャット ドッキングパネル（開くと本体が横縮小） -->
+				<ChatDock />
+			</div>
+		</Sidebar.Inset>
+	</Sidebar.Provider>
 
-<!-- AI アシスタント（フローティングチャット + 承認ダイアログ） -->
-<ChatPanel />
+	<!-- AI アシスタント（フローティングチャット + 承認ダイアログ） -->
+	<ChatPanel />
 
-<!-- v0.4.0 アップグレード通知ダイアログ -->
-<AlertDialog.Root bind:open={showUpgradeNotice}>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title class="flex items-center gap-2">
-				<Info class="size-5 text-blue-500" />
-				バックアップ機能が変わりました (v{CURRENT_VERSION})
-			</AlertDialog.Title>
-			<AlertDialog.Description class="space-y-3">
-				<p>
-					バックアップが<strong>全年度一括のフルスナップショット</strong>方式に変わりました。
-				</p>
-				<p>
-					<strong class="text-destructive"
-						>v0.3.x以前のバックアップZIPからは仕訳データのみ復元</strong
-					>されます。 事業者情報・勘定科目などの設定データは復元されません。
-				</p>
-				<p>
-					まず最初に<strong>フルバックアップ</strong
-					>を作成して、設定を含む完全なバックアップを確保してください。
-				</p>
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<div class="flex items-center gap-2 py-2">
-			<Checkbox
-				id="suppress-upgrade-notice"
-				checked={suppressUpgradeNotice}
-				onCheckedChange={(v) => (suppressUpgradeNotice = v === true)}
-			/>
-			<label for="suppress-upgrade-notice" class="cursor-pointer text-sm text-muted-foreground">
-				以降この通知を表示しない
-			</label>
-		</div>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel onclick={handleDismissUpgradeNotice}>後で</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={handleGoToBackup}>データ管理へ移動する</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+	<!-- v0.4.0 アップグレード通知ダイアログ -->
+	<AlertDialog.Root bind:open={showUpgradeNotice}>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Title class="flex items-center gap-2">
+					<Info class="size-5 text-blue-500" />
+					バックアップ機能が変わりました (v{CURRENT_VERSION})
+				</AlertDialog.Title>
+				<AlertDialog.Description class="space-y-3">
+					<p>
+						バックアップが<strong>全年度一括のフルスナップショット</strong>方式に変わりました。
+					</p>
+					<p>
+						<strong class="text-destructive"
+							>v0.3.x以前のバックアップZIPからは仕訳データのみ復元</strong
+						>されます。 事業者情報・勘定科目などの設定データは復元されません。
+					</p>
+					<p>
+						まず最初に<strong>フルバックアップ</strong
+						>を作成して、設定を含む完全なバックアップを確保してください。
+					</p>
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<div class="flex items-center gap-2 py-2">
+				<Checkbox
+					id="suppress-upgrade-notice"
+					checked={suppressUpgradeNotice}
+					onCheckedChange={(v) => (suppressUpgradeNotice = v === true)}
+				/>
+				<label for="suppress-upgrade-notice" class="cursor-pointer text-sm text-muted-foreground">
+					以降この通知を表示しない
+				</label>
+			</div>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel onclick={handleDismissUpgradeNotice}>後で</AlertDialog.Cancel>
+				<AlertDialog.Action onclick={handleGoToBackup}>データ管理へ移動する</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 
-<!-- ストレージ容量警告ダイアログ -->
-<AlertDialog.Root bind:open={showStorageWarning}>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title class="flex items-center gap-2">
-				<AlertTriangle class="size-5 text-amber-500" />
-				ストレージ使用量が多くなっています
-			</AlertDialog.Title>
-			<AlertDialog.Description>
-				現在 {formatBytes(storageUsedBytes)} のデータが保存されています。<br /><br />
-				エクスポートしてから古いデータを削除すると容量を確保できます。
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>後で</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={handleOpenSettings}>設定を開く</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+	<!-- ストレージ容量警告ダイアログ -->
+	<AlertDialog.Root bind:open={showStorageWarning}>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Title class="flex items-center gap-2">
+					<AlertTriangle class="size-5 text-amber-500" />
+					ストレージ使用量が多くなっています
+				</AlertDialog.Title>
+				<AlertDialog.Description>
+					現在 {formatBytes(storageUsedBytes)} のデータが保存されています。<br /><br />
+					エクスポートしてから古いデータを削除すると容量を確保できます。
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>後で</AlertDialog.Cancel>
+				<AlertDialog.Action onclick={handleOpenSettings}>設定を開く</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 
-<!-- トースト通知 -->
-<Toaster richColors position="top-right" />
+	<!-- トースト通知 -->
+	<Toaster richColors position="top-right" />
+{/if}
