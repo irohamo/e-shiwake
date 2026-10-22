@@ -21,3 +21,7 @@ Phase 1は人間の新規確定仕訳のみ。更新/削除APIを設けず監査
 ## 今後の境界
 
 ImportAdapterはexternal transactionを生成しprovider/account/externalIdまたはcanonical fingerprintで一意化。原文・証憑hashと取込batchを保持し、売掛/源泉/手数料/返金/入金照合を別項目にする。不明な税務判断は質問として残す。ExportAdapterは年度/科目/税区分mapping/versionを記録し、export batchと仕訳IDで再出力を警告する。freee側の再importをCSVだけで強制防止できるとはしない。
+
+## Phase 1時点のOS権限の境界
+
+会計は別コンテナで、OpenClawへDB volume/API認証情報を接続していない。ただし今回確認した既存OpenClawはDocker操作権限を持つホストユーザーのuser serviceで稼働している。別プロセス・別コンテナだけでは、このユーザーによるDocker経由のDB/secretアクセスをOS権限で遮断できない。Agent用のOSユーザー/実行環境を分離し、Docker socket・会計secret・DB volumeへの権限を外す作業はPhase 3で実施する。現時点でOpenClawの権限隔離まで完了したとはしない。

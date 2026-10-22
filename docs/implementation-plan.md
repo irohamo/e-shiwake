@@ -13,7 +13,7 @@
 
 ## Phase 3
 
-所有者cookieと独立したhash保存Agent token + scope。read: 科目/帳簿/候補/証憑metadata/未分類/照合/月次/集計、write: 候補/説明/分類提案/確認事項のみ。MCP SDKまたはOpenClaw skillはHTTPを呼びDBをmountしない。WebMCPのドメインDTO・集計を共有し、既存CRUD権限は継承しない。untrusted documentのprompt injection fixture、確定帳簿変更禁止test。
+既存OpenClawをDocker socket・会計secret・DB volumeへアクセスできないOSユーザー/実行環境に分離し、拒否を実機で検証する。所有者cookieと独立したhash保存Agent token + scope。read: 科目/帳簿/候補/証憑metadata/未分類/照合/月次/集計、write: 候補/説明/分類提案/確認事項のみ。MCP SDKまたはOpenClaw skillはHTTPを呼びDBをmountしない。WebMCPのドメインDTO・集計を共有し、既存CRUD権限は継承しない。untrusted documentのprompt injection fixture、確定帳簿変更禁止test。
 
 ## Phase 4
 
