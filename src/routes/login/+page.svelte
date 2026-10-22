@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	let ready = $state(false);
+	onMount(() => {
+		ready = true;
+	});
 	let password = $state('');
 	let message = $state('');
 	let busy = $state(false);
@@ -41,9 +46,12 @@
 			type="password"
 			autocomplete="current-password"
 			bind:value={password}
+			disabled={!ready || busy}
 			required
 		/>
-		<Button type="submit" disabled={busy} class="w-full">{busy ? '確認中…' : 'ログイン'}</Button>
+		<Button type="submit" disabled={!ready || busy} class="w-full"
+			>{busy ? '確認中…' : 'ログイン'}</Button
+		>
 		<p role="alert" class="text-sm text-destructive">{message}</p>
 	</form>
 </div>
