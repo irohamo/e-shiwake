@@ -9,11 +9,16 @@ services:
       ORIGIN: ${ORIGIN:?Set the Tailscale HTTPS origin}
       ACCOUNTING_DB_PATH: /data/accounting.sqlite
       ACCOUNTING_PASSWORD_HASH_FILE: /run/secrets/owner_password_hash
+      ACCOUNTING_AGENT_TOKEN_HASH_FILE: /run/secrets/agent_token_hash
       BODY_SIZE_LIMIT: 131072
+    networks:
+      - default
+      - agent
     volumes:
       - accounting-data:/data
     secrets:
       - owner_password_hash
+      - agent_token_hash
     healthcheck:
       test:
         [
@@ -34,7 +39,14 @@ services:
     security_opt:
       - no-new-privileges:true
 secrets:
+  agent_token_hash:
+    file: ./secrets/agent-token.hash
   owner_password_hash:
     file: ./secrets/owner-password.hash
 volumes:
   accounting-data:
+
+networks:
+  agent:
+    name: e-shiwake-agent
+    internal: true

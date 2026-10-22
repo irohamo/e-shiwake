@@ -88,8 +88,15 @@
 		>
 	</div>
 </header>
+<nav class="mb-5 flex flex-wrap gap-4 text-sm">
+	<a class="underline" href="/server/review">Review Inbox</a><a
+		class="underline"
+		href="/server/import">CSV取り込み</a
+	>
+</nav>
 <p class="mb-6 text-sm text-muted-foreground">
-	サーバーの帳簿を共有しています。保存する前に内容を確認してください。証憑・修正・AI提案は今後追加します。
+	サーバーの帳簿を共有しています。保存する前に内容を確認してください。AIの提案はReview
+	Inboxで承認してから反映します。証憑ファイルは未対応です。
 </p>
 <div class="mb-6 grid gap-4 sm:grid-cols-3">
 	<div class="rounded-xl border p-4">

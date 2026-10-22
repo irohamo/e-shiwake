@@ -12,7 +12,11 @@ try {
 		sourceDb.pragma('foreign_key_check').length
 	)
 		throw new Error('Invalid backup');
-	if (sourceDb.prepare('SELECT MAX(version) AS version FROM schema_version').get().version !== 1)
+	if (
+		![1, 2].includes(
+			sourceDb.prepare('SELECT MAX(version) AS version FROM schema_version').get().version
+		)
+	)
 		throw new Error('Unsupported backup schema');
 	const imbalance = sourceDb
 		.prepare(

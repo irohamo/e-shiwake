@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, chmodSync } from 'node:fs';
+import { migrateWorkflow } from './workflow-migration';
 import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { defaultAccounts } from '$lib/db/seed';
@@ -12,8 +13,10 @@ export class ConflictError extends Error {}
 export class SqliteAccountingStorage implements AccountingStorage {
 	readonly db: Database.Database;
 	constructor(path: string) {
+		const existed = path !== ':memory:' && existsSync(path);
 		if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 		this.db = new Database(path);
+		if (path !== ':memory:') chmodSync(path, 0o600);
 		this.db.pragma('journal_mode = WAL');
 		this.db.pragma('foreign_keys = ON');
 		this.db.pragma('busy_timeout = 5000');
@@ -41,10 +44,14 @@ export class SqliteAccountingStorage implements AccountingStorage {
 		const version = this.db.prepare('SELECT MAX(version) AS version FROM schema_version').get() as {
 			version: number;
 		};
-		if (version.version !== 1) {
+		if (![1, 2].includes(version.version)) {
 			this.db.close();
 			throw new Error('Unsupported schema version');
 		}
+		migrateWorkflow(
+			this.db,
+			existed && version.version === 1 ? `${path}.before-v2-${randomUUID()}.sqlite` : undefined
+		);
 		this.db.transaction(() => {
 			const seed = this.db.prepare('INSERT OR IGNORE INTO accounts(code,data) VALUES(?,?)');
 			for (const account of defaultAccounts) seed.run(account.code, JSON.stringify(account));
@@ -91,7 +98,16 @@ export class SqliteAccountingStorage implements AccountingStorage {
 		});
 	}
 	async createJournal(input: NewJournal, requestId: string): Promise<string> {
+		return this.postJournal(input, requestId);
+	}
+	postJournal(input: NewJournal, requestId: string): string {
 		const journal = journalSchema.parse(input);
+		if (
+			this.db
+				.prepare('SELECT 1 FROM closed_years WHERE year=?')
+				.get(Number(journal.date.slice(0, 4)))
+		)
+			throw new ConflictError('締め済み年度には保存できません');
 		const hash = createHash('sha256').update(JSON.stringify(journal)).digest('hex');
 		return this.db
 			.transaction(() => {

@@ -16,7 +16,8 @@
 		"test:browser": "vitest --project client",
 		"test": "npm run test:unit -- --run",
 		"start": "node build",
-		"test:server-e2e": "node scripts/server-smoke.mjs"
+		"test:server-e2e": "node scripts/server-smoke.mjs",
+		"test:workflow-e2e": "node scripts/workflow-smoke.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",
@@ -63,6 +64,7 @@
 	"dependencies": {
 		"@sveltejs/adapter-node": "^5.5.7",
 		"better-sqlite3": "^13.0.3",
+		"csv-parse": "^7.0.3",
 		"dexie": "^4.2.1",
 		"dompurify": "^3.2.4",
 		"jszip": "^3.10.1",

@@ -1,8 +1,11 @@
 import type { Handle } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { authenticated, SESSION_COOKIE } from '$lib/server/auth';
+import { AgentRateLimit } from '$lib/server/agent-rate';
+import { authenticateAgent } from '$lib/server/agent-auth';
 import { getStorage } from '$lib/server/runtime';
 
+const agentRate = new AgentRateLimit();
 const failure = (status: number, message: string) =>
 	new Response(JSON.stringify({ message }), {
 		status,
@@ -14,6 +17,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (
 			path.includes('/api/accounting') ||
 			path.includes('/api/auth') ||
+			path.includes('/api/workflow') ||
+			path.includes('/api/agent') ||
 			/\/(server|login)$/.test(path)
 		)
 			return failure(404, 'Server Mode is disabled');
@@ -27,7 +32,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 	) {
 		return failure(503, 'Server Modeの設定が不足または不一致です');
 	}
+	const agentPath = /^\/api\/agent\/[a-z-]+$/.test(path);
+	if (
+		agentPath &&
+		!authenticateAgent(
+			event.request.headers.get('authorization'),
+			env.ACCOUNTING_AGENT_TOKEN_HASH_FILE
+		)
+	)
+		return failure(401, 'Agent認証が必要です');
+	if (agentPath && !agentRate.allow()) return failure(429, 'Agent APIは1分120回までです');
 	const allowed = [
+		'/server/review',
+		'/server/import',
 		'/',
 		'/login',
 		'/server',
@@ -37,9 +54,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 		'/api/accounting/journals',
 		'/api/accounting/trial-balance'
 	];
-	if (!allowed.includes(path) && !path.startsWith('/_app/') && path !== '/favicon.ico')
+	if (
+		!allowed.includes(path) &&
+		!agentPath &&
+		!/^\/api\/workflow\/[a-z-]+$/.test(path) &&
+		!path.startsWith('/_app/') &&
+		path !== '/favicon.ico'
+	)
 		return failure(404, 'この機能はServer Modeへ未移植です');
-	if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)) {
+	if (!agentPath && !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)) {
 		if (event.request.headers.get('origin') !== env.ORIGIN || event.url.origin !== env.ORIGIN)
 			return failure(403, '同一オリジンから操作してください');
 	}
@@ -49,6 +72,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			headers: { location: '/server', 'cache-control': 'no-store' }
 		});
 	if (
+		!agentPath &&
 		path !== '/login' &&
 		path !== '/api/auth/login' &&
 		!path.startsWith('/_app/') &&
