@@ -24,7 +24,17 @@
 	},
 	"tools": {
 		"allow": ["read", "exec", "process"],
-		"elevated": { "enabled": false },
-		"exec": { "host": "sandbox", "security": "full" }
+		"elevated": {
+			"enabled": false
+		},
+		"exec": {
+			"host": "sandbox",
+			"security": "full"
+		},
+		"sandbox": {
+			"tools": {
+				"allow": ["read", "exec", "process"]
+			}
+		}
 	}
 }

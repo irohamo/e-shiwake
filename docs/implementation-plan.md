@@ -26,3 +26,7 @@
 ## 継続作業の原則
 
 Local既存routeを移植するたびStorage契約を小さく拡張し、DB直参照を除去し、browser testを追加してからServer routeのallowlistへ追加。DB schema変更はversioned migrationとして既存データをbackup後に適用する。実データ/鍵/証憑/DBはGit禁止。
+
+## 2026-10-23追加実装
+
+Phase 2の最小レビュー（Draft/Pending/Approved/Rejected、修正・監査・同時操作防止）、Phase 3の制限付きAgent APIと専用sandbox Agent、Phase 4の汎用CSV preview/import/重複検査を実装。逆仕訳・年度締めUI・PDF・Local migration・freee export等は未実装。実際の境界と検証は`docs/openclaw-csv.md`を参照。

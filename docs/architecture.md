@@ -25,3 +25,7 @@ ImportAdapterはexternal transactionを生成しprovider/account/externalIdま�
 ## Phase 1時点のOS権限の境界
 
 会計は別コンテナで、OpenClawへDB volume/API認証情報を接続していない。ただし今回確認した既存OpenClawはDocker操作権限を持つホストユーザーのuser serviceで稼働している。別プロセス・別コンテナだけでは、このユーザーによるDocker経由のDB/secretアクセスをOS権限で遮断できない。Agent用のOSユーザー/実行環境を分離し、Docker socket・会計secret・DB volumeへの権限を外す作業はPhase 3で実施する。現時点でOpenClawの権限隔離まで完了したとはしない。
+
+## OpenClaw / CSV追加後の境界（2026-10-23）
+
+会計専用の`accounting` Agentを追加し、既存mainと別workspace・常時Docker sandbox・read-only mounts・内部network・昇格禁止にした。sandboxは専用の制限付きAPIキーだけを持ち、DB/owner secret/Docker socket/SSH鍵をmountしない。実際のAgent turnとアクセス拒否を検証済み。Gateway/host operatorや汎用mainの権限までは制限していない。CSV明細・候補・帳簿は別tableで、人間の承認transactionだけが帳簿へ転記する。詳細は`docs/openclaw-csv.md`。

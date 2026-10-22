@@ -50,3 +50,13 @@ Composeの`e-shiwake-agent` networkはinternal。sandboxは同じnetworkへ参�
 ## Scope still remaining
 
 PDF/Gmail/ASC/Stripe連携、Local帳簿migration実行、freee用CSV export、逆仕訳・年度締めUI、完全な証憑照合は未実装。closed_yearsに登録済みの年への投稿は拒否するが、年度末締め操作UIはまだ提供しない。freee互換性は保証しない。Read APIは1回500件まで、未分類queueは処理後に次の明細を取得できる。
+
+## Verified deployment
+
+会計専用Agent IDは`accounting`。2026-10-23に実Gateway経由のread-only turnで、Skillを読みsandbox_execから`client.mjs status`を実行できた。新Agentのmodelを独自指定せず、既存設定を継承した。
+
+実sandboxはUID/GID1000、read-only root、read-onlyの`/agent`と`/workspace`だけをmount。会計DB、owner secret、SSH鍵、Docker socketは存在しないことを確認。内部networkからAgent status=200、Agent帳簿POST=403、owner API GET=401、外部HTTPS接続不可を確認した。elevatedは無効、ツールはread/sandbox_exec/sandbox_processのみが実際のturnへ渡された。
+
+既存main Agentのentry・チャネルbinding・global toolsは維持。複数Agent追加によって既存の定期処理が無効化されないよう、暗黙の担当だったmainを`agents.defaults.heartbeat.agentId`と`agents.defaults.systemAgent.agentId`で明示した。Gateway/host管理者と既存main自体をsandbox化したわけではない。
+
+localの全782 tests、型check 0 errors/warnings、追加コードESLint、Server/Local builds、Local PWA offline reloadを確認。hp-i3の稼働imageを使う一時DBで、PC/iPhone相当幅のCSV preview/commit/reimport・候補作成・修正・承認・却下・承認前非転記・古いversionの拒否・PL/BS/試算表を検証し、関連console errorなし。iPhone実機/Safariは未検証。Browser pluginは使えるskill一覧になかったため既存Playwrightを利用した。
