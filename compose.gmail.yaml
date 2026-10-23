@@ -1,0 +1,23 @@
+# Optional, explicit one-shot collector. Never starts with the ordinary compose command.
+services:
+  accounting:
+    environment:
+      ACCOUNTING_GMAIL_TOKEN_HASH_FILE: /run/secrets/gmail_token_hash
+    secrets:
+      - gmail_token_hash
+  gmail-ingest:
+    profiles: [gmail]
+    build: ./integrations/gmail
+    init: true
+    restart: 'no'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ${GMAIL_STATE_DIR:?Set private absolute Gmail state directory}:/state
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    # No DB, owner/Agent secret, Docker socket, public ports or agent network.
+secrets:
+  gmail_token_hash:
+    file: ./secrets/gmail-token.hash
