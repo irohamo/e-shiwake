@@ -51,7 +51,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	error(404, '未対応の操作');
 };
 export const POST: RequestHandler = async ({ params, request }) => {
-	if (!['proposals', 'annotations', 'evidence-link'].includes(params.resource))
+	if (!['proposals', 'annotations', 'evidence-link', 'reclassify'].includes(params.resource))
 		error(403, 'Agentは候補と説明だけを作成できます');
 	const body = await readJson(request);
 	const service = new WorkflowService(getStorage());
@@ -65,6 +65,29 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			if (row.proposal_id) error(409, '証憑は既にリンク済みです');
 			e.link(p.data.id, row.version, p.data.proposalId, 'agent');
 			return json({ linked: true, duplicate: false });
+		}
+		if (params.resource === 'reclassify') {
+			const p = z
+				.object({
+					proposalId: z.uuid(),
+					version: z.number().int().min(1),
+					fromAccountCode: z.string().regex(/^\d{4}$/),
+					toAccountCode: z.string().regex(/^\d{4}$/),
+					reason: z.string().min(1).max(1000)
+				})
+				.strict()
+				.safeParse(body);
+			if (!p.success) error(400, '再分類形式を確認してください');
+			return json(
+				service.reclassifyDebit(
+					p.data.proposalId,
+					p.data.version,
+					p.data.fromAccountCode,
+					p.data.toAccountCode,
+					p.data.reason,
+					'agent'
+				)
+			);
 		}
 		if (params.resource === 'proposals') {
 			const p = proposalSchema.safeParse(body);

@@ -4,6 +4,7 @@ import type { ProposalInput } from './workflow-schema';
 export interface PositiveRule {
 	auto?: boolean;
 	debit?: string;
+	businessRatio?: number;
 	sender?: string;
 	subjectIncludes?: string;
 	skip?: boolean;

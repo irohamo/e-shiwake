@@ -116,6 +116,61 @@ export class WorkflowService {
 			})
 			.immediate();
 	}
+	reclassifyDebit(
+		proposalId: string,
+		version: number,
+		from: string,
+		to: string,
+		reason: string,
+		actor: 'agent' | 'owner'
+	) {
+		return this.db
+			.transaction(() => {
+				const p = this.db
+					.prepare('SELECT version,status,journal FROM proposals WHERE id=?')
+					.get(proposalId) as { version: number; status: string; journal: string } | undefined;
+				if (!p || p.version !== version || p.status !== 'pending')
+					throw new ConflictError('候補がないか変更済み、または確認待ちではありません');
+				if (from === to) throw new ConflictError('変更前後の勘定科目が同じです');
+				const account = this.db.prepare('SELECT data FROM accounts WHERE code=?').get(to) as
+					{ data: string } | undefined;
+				if (!account || JSON.parse(account.data).type !== 'expense')
+					throw new ConflictError('変更先は登録済みの費用科目にしてください');
+				const journal = JSON.parse(p.journal) as NewJournal;
+				const lines: string[] = [];
+				for (const line of journal.lines) {
+					if (line.type === 'debit' && line.accountCode === from) {
+						line.accountCode = to;
+						lines.push(line.id);
+					}
+				}
+				if (!lines.length) throw new ConflictError('変更対象の借方科目がありません');
+				const parsed = proposalSchema.shape.journal.parse(journal);
+				this.db
+					.prepare("UPDATE proposals SET journal=?,status='pending',version=version+1 WHERE id=?")
+					.run(JSON.stringify(parsed), proposalId);
+				this.db
+					.prepare(
+						'INSERT INTO proposal_annotations(proposal_id,kind,text,actor,at) VALUES(?,?,?,?,?)'
+					)
+					.run(
+						proposalId,
+						'classification',
+						`${from} -> ${to}: ${reason}`,
+						actor,
+						new Date().toISOString()
+					);
+				this.audit(actor, 'proposal.reclassify', proposalId, {
+					from,
+					to,
+					reason,
+					previousVersion: version,
+					lines
+				});
+				return { id: proposalId, version: version + 1 };
+			})
+			.immediate();
+	}
 	decide(
 		id: string,
 		version: number,

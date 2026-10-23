@@ -142,6 +142,46 @@ test('host intake retry, unknown tax, exclusions and conflict behavior', async (
 			assert.equal((await run({ ...p, raw: Buffer.from('different').toString('base64') })).code, 1);
 			assert.equal(proposals.size, 6);
 		});
+		await t.test('vendor ratio defaults to 100 and preserves full amounts', async () => {
+			assert.equal(JSON.parse([...proposals.values()][0].text).businessRatio, 100);
+			for (const businessRatio of [0, 50, 100]) {
+				writeFileSync(
+					join(home, '.config/e-shiwake/vendor-rules.json'),
+					JSON.stringify({ vendors: { 'google cloud': { debit: '5006', businessRatio } } })
+				);
+				assert.equal((await run({ ...p, messageId: `ratio-${businessRatio}` })).code, 0);
+				const proposal = JSON.parse([...proposals.values()].at(-1).text);
+				assert.equal(proposal.businessRatio, businessRatio);
+				assert.equal(proposal.status, 'pending');
+				assert.deepEqual(
+					proposal.journal.lines.map((l) => l.amount),
+					[63, 63]
+				);
+				assert.deepEqual(
+					proposal.questions,
+					businessRatio === 100
+						? []
+						: [`家事按分（事業割合 ${businessRatio}%）の計算・承認方法を確認してください`]
+				);
+			}
+		});
+		await t.test('invalid vendor ratios fail before API calls', async () => {
+			for (const businessRatio of [-1, 101, 50.5, '50', null, true]) {
+				writeFileSync(
+					join(home, '.config/e-shiwake/vendor-rules.json'),
+					JSON.stringify({ vendors: { 'google cloud': { debit: '5006', businessRatio } } })
+				);
+				const n = requests.length;
+				const result = await run({ ...p, messageId: 'invalid-ratio' });
+				assert.equal(result.code, 1);
+				assert.equal(result.error, 'invalid_rule_ratio');
+				assert.equal(requests.length, n);
+			}
+			writeFileSync(
+				join(home, '.config/e-shiwake/vendor-rules.json'),
+				JSON.stringify({ vendors: { 'google cloud': { debit: '5006' } } })
+			);
+		});
 		await t.test('non-loopback plaintext URL is rejected', async () => {
 			const n = requests.length;
 			assert.equal((await run(p, 'http://example.com')).error, 'invalid_url');

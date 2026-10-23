@@ -12,7 +12,7 @@ const read = new Set([
 	'profit-loss',
 	'balance-sheet'
 ]);
-const post = { 'create-proposal': 'proposals', annotate: 'annotations' };
+const post = { 'create-proposal': 'proposals', annotate: 'annotations', reclassify: 'reclassify' };
 if (!read.has(command) && !Object.hasOwn(post, command)) throw new Error('Command not allowed');
 const base = new URL(process.env.ESHIWAKE_URL || 'http://127.0.0.1:3000');
 if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password)

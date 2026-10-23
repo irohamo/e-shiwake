@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { SqliteAccountingStorage } from './sqlite';
+import { ConflictError, SqliteAccountingStorage } from './sqlite';
 import { WorkflowService } from './workflow';
 import { parseCsv } from './csv-import';
 import { proposalSchema, type CsvInput, type ProposalInput } from './workflow-schema';
@@ -262,4 +262,134 @@ it('refuses question resolution on an already approved proposal', async () => {
 		questions: p.questions
 	});
 	expect(await s.listJournals()).toHaveLength(1);
+});
+
+it.each(['agent', 'owner'] as const)(
+	'reclassifies only matching debits with audit and annotation as %s',
+	async (actor) => {
+		const store = open();
+		const w = new WorkflowService(store);
+		const p = proposal();
+		p.businessRatio = 50;
+		p.questions = ['用途を確認'];
+		p.journal.lines = [
+			{
+				id: randomUUID(),
+				type: 'debit',
+				accountCode: '5024',
+				amount: 400,
+				taxCategory: 'purchase_10',
+				memo: 'first'
+			},
+			{
+				id: randomUUID(),
+				type: 'debit',
+				accountCode: '5024',
+				amount: 300,
+				taxCategory: 'purchase_8'
+			},
+			{ id: randomUUID(), type: 'debit', accountCode: '5001', amount: 300 },
+			{
+				id: randomUUID(),
+				type: 'credit',
+				accountCode: '5024',
+				amount: 1000,
+				taxCategory: 'out_of_scope',
+				memo: 'credit'
+			}
+		];
+		const id = w.createProposal(p, 'agent');
+		const before = w.listProposals()[0];
+		expect(w.reclassifyDebit(id, 1, '5024', '5006', '用途に合わせる', actor)).toEqual({
+			id,
+			version: 2
+		});
+		const after = w.listProposals()[0];
+		expect(after).toEqual({
+			...before,
+			version: 2,
+			journal: {
+				...before.journal,
+				lines: before.journal.lines.map((line, i) =>
+					i < 2 ? { ...line, accountCode: '5006' } : line
+				)
+			},
+			annotations: [
+				{
+					kind: 'classification',
+					text: '5024 -> 5006: 用途に合わせる',
+					actor,
+					at: expect.any(String)
+				}
+			]
+		});
+		const audit = store.db
+			.prepare("SELECT actor,entity_id,detail FROM audit_log WHERE action='proposal.reclassify'")
+			.all() as { actor: string; entity_id: string; detail: string }[];
+		expect(audit).toHaveLength(1);
+		expect(audit[0]).toMatchObject({ actor, entity_id: id });
+		expect(JSON.parse(audit[0].detail)).toEqual({
+			from: '5024',
+			to: '5006',
+			reason: '用途に合わせる',
+			previousVersion: 1,
+			lines: p.journal.lines.slice(0, 2).map((l) => l.id)
+		});
+		expect(await store.listJournals()).toEqual([]);
+		expect(() => w.decide(id, 1, 'approve')).toThrow(ConflictError);
+	}
+);
+
+it.each([
+	'missing',
+	'stale',
+	'draft',
+	'approved',
+	'rejected',
+	'unknown-account',
+	'non-expense',
+	'same-account',
+	'missing-debit',
+	'credit-only'
+])('rejects reclassification for %s without mutations', (scenario) => {
+	const store = open();
+	const w = new WorkflowService(store);
+	const p = proposal();
+	if (scenario === 'draft') p.status = 'draft';
+	const id = w.createProposal(p, 'agent');
+	if (scenario === 'approved') w.decide(id, 1, 'approve');
+	if (scenario === 'rejected') w.decide(id, 1, 'reject');
+	const before = w.listProposals();
+	const auditBefore = store.db.prepare('SELECT * FROM audit_log').all();
+	const to =
+		scenario === 'unknown-account'
+			? '9999'
+			: scenario === 'non-expense' || scenario === 'same-account'
+				? '1001'
+				: '5006';
+	const from = scenario === 'missing-debit' ? '5024' : scenario === 'credit-only' ? '4001' : '1001';
+	expect(() =>
+		w.reclassifyDebit(
+			scenario === 'missing' ? randomUUID() : id,
+			scenario === 'stale' || scenario === 'approved' || scenario === 'rejected' ? 2 : 1,
+			from,
+			to,
+			'test',
+			'agent'
+		)
+	).toThrow(ConflictError);
+	expect(w.listProposals()).toEqual(before);
+	expect(store.db.prepare('SELECT * FROM audit_log').all()).toEqual(auditBefore);
+});
+
+it('rolls back reclassification and annotation if the audit fails', () => {
+	const store = open();
+	const w = new WorkflowService(store);
+	const id = w.createProposal(proposal(), 'agent');
+	const before = w.listProposals();
+	store.db.exec(
+		"CREATE TRIGGER fail_reclassify BEFORE INSERT ON audit_log WHEN NEW.action='proposal.reclassify' BEGIN SELECT RAISE(ABORT,'audit failure'); END"
+	);
+	expect(() => w.reclassifyDebit(id, 1, '1001', '5006', 'test', 'agent')).toThrow('audit failure');
+	expect(w.listProposals()).toEqual(before);
 });

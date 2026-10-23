@@ -62,6 +62,9 @@ try {
 		console.log(JSON.stringify({ requestId, skipped: true }));
 		process.exit(0);
 	}
+	const businessRatio = rule?.businessRatio === undefined ? 100 : rule.businessRatio;
+	if (!Number.isInteger(businessRatio) || businessRatio < 0 || businessRatio > 100)
+		throw Error('invalid_rule_ratio');
 	const base = new URL(process.env.ESHIWAKE_URL || 'http://127.0.0.1:3000');
 	if (
 		base.username ||
@@ -113,6 +116,8 @@ try {
 		ingest
 	);
 	const questions = [];
+	if (businessRatio !== 100)
+		questions.push(`家事按分（事業割合 ${businessRatio}%）の計算・承認方法を確認してください`);
 	if (!rule || rule.review) questions.push('用途・科目・税区分を確認してください');
 	if (!hasRaw) questions.push('原本MIME未提供：ペイロード写しを保管しています');
 	const taxRate = p.taxRate ?? rules.defaultTaxRate ?? 10;
@@ -122,7 +127,7 @@ try {
 	const proposal = {
 		requestId,
 		status: 'pending',
-		businessRatio: 100,
+		businessRatio,
 		questions,
 		rationale: JSON.stringify({
 			source: p.source,
