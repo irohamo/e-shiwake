@@ -36,3 +36,6 @@ vite.config.ts.timestamp-*
 /build*.log
 /startup.log
 ._*
+
+# Host operational configuration
+/local-ops/

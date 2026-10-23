@@ -1,11 +1,10 @@
 import { error } from '@sveltejs/kit';
 /** Read a bounded body even if Content-Length is absent or forged. */
-export async function readJson(request: Request): Promise<unknown> {
+export async function readJson(request: Request, maxBytes = 128 * 1024): Promise<unknown> {
 	if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json')
 		error(415, 'JSONのみ受け付けます');
 	const length = request.headers.get('content-length');
-	if (length && /^\d+$/.test(length) && Number(length) > 128 * 1024)
-		error(413, '本文が大きすぎます');
+	if (length && /^\d+$/.test(length) && Number(length) > maxBytes) error(413, '本文が大きすぎます');
 	const reader = request.body?.getReader();
 	if (!reader) error(400, '本文がありません');
 	const chunks: Uint8Array[] = [];
@@ -14,7 +13,7 @@ export async function readJson(request: Request): Promise<unknown> {
 		const { done, value } = await reader.read();
 		if (done) break;
 		size += value.byteLength;
-		if (size > 128 * 1024) {
+		if (size > maxBytes) {
 			reader.releaseLock();
 			error(413, '本文が大きすぎます');
 		}

@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { mkdirSync, existsSync, chmodSync } from 'node:fs';
+import { migrateEvidence } from './evidence-migration';
 import { migrateWorkflow } from './workflow-migration';
 import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -51,6 +52,10 @@ export class SqliteAccountingStorage implements AccountingStorage {
 		migrateWorkflow(
 			this.db,
 			existed && version.version === 1 ? `${path}.before-v2-${randomUUID()}.sqlite` : undefined
+		);
+		migrateEvidence(
+			this.db,
+			existed ? `${path}.before-evidence-${randomUUID()}.sqlite` : undefined
 		);
 		this.db.transaction(() => {
 			const seed = this.db.prepare('INSERT OR IGNORE INTO accounts(code,data) VALUES(?,?)');

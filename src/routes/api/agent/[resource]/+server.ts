@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { getEvidence } from '$lib/server/evidence-runtime';
 import { json, error } from '@sveltejs/kit';
 import { getStorage } from '$lib/server/runtime';
 import { WorkflowService } from '$lib/server/workflow';
@@ -49,11 +51,21 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	error(404, '未対応の操作');
 };
 export const POST: RequestHandler = async ({ params, request }) => {
-	if (!['proposals', 'annotations'].includes(params.resource))
+	if (!['proposals', 'annotations', 'evidence-link'].includes(params.resource))
 		error(403, 'Agentは候補と説明だけを作成できます');
 	const body = await readJson(request);
 	const service = new WorkflowService(getStorage());
 	try {
+		if (params.resource === 'evidence-link') {
+			const p = z.object({ id: z.uuid(), proposalId: z.uuid() }).strict().safeParse(body);
+			if (!p.success) error(400, '証憑リンク形式を確認してください');
+			const e = getEvidence();
+			const row = e.row(p.data.id);
+			if (row.proposal_id === p.data.proposalId) return json({ linked: true, duplicate: true });
+			if (row.proposal_id) error(409, '証憑は既にリンク済みです');
+			e.link(p.data.id, row.version, p.data.proposalId, 'agent');
+			return json({ linked: true, duplicate: false });
+		}
 		if (params.resource === 'proposals') {
 			const p = proposalSchema.safeParse(body);
 			if (!p.success) error(400, '候補形式・借貸一致・整数円を確認してください');

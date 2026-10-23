@@ -8,9 +8,10 @@ services:
     environment:
       ORIGIN: ${ORIGIN:?Set the Tailscale HTTPS origin}
       ACCOUNTING_DB_PATH: /data/accounting.sqlite
+      ACCOUNTING_EVIDENCE_PATH: /data/evidence
       ACCOUNTING_PASSWORD_HASH_FILE: /run/secrets/owner_password_hash
       ACCOUNTING_AGENT_TOKEN_HASH_FILE: /run/secrets/agent_token_hash
-      BODY_SIZE_LIMIT: 131072
+      BODY_SIZE_LIMIT: 12582912
     networks:
       - default
       - agent

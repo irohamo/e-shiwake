@@ -19,6 +19,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 			path.includes('/api/auth') ||
 			path.includes('/api/workflow') ||
 			path.includes('/api/agent') ||
+			path.includes('/api/evidence') ||
+			path.includes('/api/integrations') ||
 			/\/(server|login)$/.test(path)
 		)
 			return failure(404, 'Server Mode is disabled');
@@ -32,6 +34,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 	) {
 		return failure(503, 'Server Modeの設定が不足または不一致です');
 	}
+	const ingestPath = path === '/api/integrations/gmail/evidence';
+	if (
+		ingestPath &&
+		(event.request.method !== 'POST' ||
+			!authenticateAgent(
+				event.request.headers.get('authorization'),
+				env.ACCOUNTING_GMAIL_TOKEN_HASH_FILE
+			))
+	)
+		return failure(401, '証憑投入専用認証が必要です');
+	if (ingestPath && !agentRate.allow()) return failure(429, '投入上限');
 	const agentPath = /^\/api\/agent\/[a-z-]+$/.test(path);
 	if (
 		agentPath &&
@@ -57,12 +70,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (
 		!allowed.includes(path) &&
 		!agentPath &&
+		!ingestPath &&
 		!/^\/api\/workflow\/[a-z-]+$/.test(path) &&
+		!/^\/api\/evidence\/[a-z-]+$/.test(path) &&
 		!path.startsWith('/_app/') &&
 		path !== '/favicon.ico'
 	)
 		return failure(404, 'この機能はServer Modeへ未移植です');
-	if (!agentPath && !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)) {
+	if (!agentPath && !ingestPath && !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)) {
 		if (event.request.headers.get('origin') !== env.ORIGIN || event.url.origin !== env.ORIGIN)
 			return failure(403, '同一オリジンから操作してください');
 	}
@@ -73,6 +88,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		});
 	if (
 		!agentPath &&
+		!ingestPath &&
 		path !== '/login' &&
 		path !== '/api/auth/login' &&
 		!path.startsWith('/_app/') &&

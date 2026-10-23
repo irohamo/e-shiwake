@@ -17,7 +17,8 @@
 		"test": "npm run test:unit -- --run",
 		"start": "node build",
 		"test:server-e2e": "node scripts/server-smoke.mjs",
-		"test:workflow-e2e": "node scripts/workflow-smoke.mjs"
+		"test:workflow-e2e": "node scripts/workflow-smoke.mjs",
+		"test:evidence-e2e": "node scripts/evidence-smoke.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",

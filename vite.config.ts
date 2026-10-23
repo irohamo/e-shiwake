@@ -140,7 +140,7 @@ export default defineConfig({
 					},
 
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
-					exclude: ['src/lib/server/**']
+					exclude: ['src/lib/server/**', '**/._*']
 				}
 			},
 
@@ -151,7 +151,7 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', '**/._*'],
 					setupFiles: ['src/lib/db/test-setup.ts']
 				}
 			}

@@ -7,6 +7,33 @@
 	import { TaxCategoryLabels, type Account } from '$lib/types';
 	import type { Proposal } from '$lib/server/workflow-schema';
 	import type { NewJournal } from '$lib/storage/accounting';
+	let evidence = $state<
+		{
+			id: string;
+			hash: string;
+			version: number;
+			proposal_id: string | null;
+			questions: { id: string; version: number; text: string; answer: string | null }[];
+		}[]
+	>([]);
+	let answers = $state<Record<string, string>>({});
+	let links = $state<Record<string, string>>({});
+	async function evidenceAction(body: unknown) {
+		busy = true;
+		try {
+			const r = await fetch('/api/evidence/decision', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			if (!r.ok) throw new Error('証憑操作に失敗しました。再読込してください');
+			await load();
+		} catch (e) {
+			message = e instanceof Error ? e.message : '操作失敗';
+		} finally {
+			busy = false;
+		}
+	}
 	let proposals = $state<Proposal[]>([]);
 	let accounts = $state<Account[]>([]);
 	let transactions = $state<
@@ -25,6 +52,8 @@
 				createHttpAccountingStorage().listAccounts(),
 				workflowRequest<typeof transactions>('transactions')
 			]);
+			const response = await fetch('/api/evidence/inbox');
+			if (response.ok) evidence = await response.json();
 			confirmed = {};
 		} catch (e) {
 			message = e instanceof Error ? e.message : '読込失敗';
@@ -77,6 +106,56 @@
 	</div>
 	<Button variant="outline" onclick={load}>再読込</Button>
 </header>
+<section class="my-6 space-y-3 rounded border p-4">
+	<h2 class="text-xl font-semibold">Gmail証憑・まとめて確認</h2>
+	<p>証憑は未検証の資料です。未定義ルールは保留し、回答や無回答だけで承認しません。</p>
+	{#each evidence as e (e.id)}
+		<article class="space-y-2 rounded border p-3">
+			<p>証憑 {e.id} / version {e.version}</p>
+			<a class="underline" href={'/api/evidence/original?id=' + e.id}>原本をダウンロード</a>
+			<p class="text-xs break-all">SHA-256: {e.hash}</p>
+			<label
+				>関連候補<select bind:value={links[e.id]}
+					><option value="">選択してください</option
+					>{#each proposals.filter( (p) => ['pending', 'draft'].includes(p.status) ) as p (p.id)}<option
+							value={p.id}>{p.journal.date} / {p.journal.description}</option
+						>{/each}</select
+				></label
+			>
+			<Button
+				disabled={busy || !links[e.id]}
+				onclick={() =>
+					evidenceAction({ action: 'link', id: e.id, version: e.version, proposalId: links[e.id] })}
+				>候補に紐付けて再レビュー</Button
+			>
+			{#each e.questions as q (q.id)}
+				<p class="whitespace-pre-wrap">{q.text}</p>
+				{#if q.answer}<p class="whitespace-pre-wrap">
+						回答: {q.answer}
+					</p>{:else if q.version === e.version}
+					<label class="block"
+						>根拠を含む回答<textarea
+							class="block w-full rounded border p-2"
+							maxlength="4000"
+							bind:value={answers[q.id]}
+						></textarea></label
+					>
+					<Button
+						disabled={busy || !answers[q.id]?.trim()}
+						onclick={() =>
+							evidenceAction({
+								action: 'answer',
+								questionId: q.id,
+								version: e.version,
+								text: answers[q.id]
+							})}>回答を保存して再レビュー</Button
+					>
+				{:else}<p>古い質問（現在のversionの質問へ回答してください）</p>{/if}
+			{/each}
+		</article>
+	{/each}
+	{#if evidence.length === 0}<p>登録された証憑はありません。</p>{/if}
+</section>
 <label class="text-sm"
 	>表示<select bind:value={filter} class="ml-3 rounded border bg-background p-2"
 		><option value="pending">確認待ち</option><option value="draft">Draft</option><option

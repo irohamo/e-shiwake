@@ -1,0 +1,7 @@
+# REVIEW ONLY. Do not apply until owner approves the positive-rule branch.
+services:
+  accounting:
+    environment:
+      ACCOUNTING_EXPENSE_RULES_FILE: /run/expense-rules/vendor-rules.json
+    volumes:
+      - /home/irohamo/.config/e-shiwake/vendor-rules.json:/run/expense-rules/vendor-rules.json:ro

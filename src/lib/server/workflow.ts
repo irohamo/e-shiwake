@@ -120,7 +120,8 @@ export class WorkflowService {
 		id: string,
 		version: number,
 		action: 'approve' | 'reject' | 'update',
-		journal?: NewJournal
+		journal?: NewJournal,
+		actor: 'owner' | 'backend-policy' = 'owner'
 	) {
 		return this.db
 			.transaction(() => {
@@ -142,7 +143,7 @@ export class WorkflowService {
 					this.db
 						.prepare("UPDATE proposals SET journal=?,status='pending',version=version+1 WHERE id=?")
 						.run(JSON.stringify(parsed), id);
-					this.audit('owner', 'proposal.update', id, parsed);
+					this.audit(actor, 'proposal.update', id, parsed);
 					return { id };
 				}
 				if (action === 'approve') {
@@ -165,13 +166,13 @@ export class WorkflowService {
 							"UPDATE proposals SET status='approved',posted_journal_id=?,version=version+1 WHERE id=?"
 						)
 						.run(journalId, id);
-					this.audit('owner', 'proposal.approve', id, { journalId });
+					this.audit(actor, 'proposal.approve', id, { journalId });
 					return { id, journalId };
 				}
 				this.db
 					.prepare("UPDATE proposals SET status='rejected',version=version+1 WHERE id=?")
 					.run(id);
-				this.audit('owner', 'proposal.reject', id, {});
+				this.audit(actor, 'proposal.reject', id, {});
 				return { id };
 			})
 			.immediate();
