@@ -82,11 +82,10 @@
 </script>
 
 <svelte:head><title>CSV取り込み | e-shiwake</title></svelte:head>
-<a href="/server" class="text-sm underline">← 仕訳帳へ</a>
+
 <h1 class="my-6 text-2xl font-bold">CSV取り込み</h1>
 <p class="mb-6 text-sm text-muted-foreground">
-	銀行・カード・売上の明細を取り込みます。帳簿への反映は、OpenClawの候補をReview
-	Inboxで確認・承認した後です。
+	銀行・カード・売上の明細を取り込みます。帳簿への反映は、AIの候補を「承認待ち」で確認・承認した後です。
 </p>
 <div class="space-y-4 rounded-xl border p-4 sm:p-6">
 	<label class="block text-sm"
@@ -128,7 +127,7 @@
 	<label class="block text-sm"
 		>金額の向き<select
 			bind:value={direction}
-			class="ml-2 max-w-full rounded border bg-background p-2"
+			class="mt-2 block w-full rounded border bg-background p-2 sm:w-auto"
 			><option value="signed">正数=入金・負数=出金</option><option value="expense"
 				>正数=利用・出金（負数は返金）</option
 			><option value="income">正数=売上（負数は返金）</option></select
@@ -164,7 +163,7 @@
 <p role="status" class="my-4 text-sm">{message}</p>
 {#if preview}
 	<section class="space-y-4 rounded-xl border p-4">
-		<h2 class="text-lg font-semibold">プレビュー</h2>
+		<h2 class="text-lg font-semibold">プレビュー（帳簿にはまだ反映されません）</h2>
 		<p>
 			新規 {preview.counts.new}件 / 重複 {preview.counts.duplicate}件 / 内容競合 {preview.counts
 				.conflict}件
@@ -181,6 +180,9 @@
 					</p>
 				</div>{/each}
 		</div>
+		{#if preview.counts.conflict > 0}<p role="alert" class="text-sm text-destructive">
+				内容が競合する明細があります。CSVの明細ID・金額を確認し、修正後にもう一度プレビューしてください。
+			</p>{/if}
 		<Button disabled={busy || preview.counts.conflict > 0} onclick={commit}
 			>確認して明細を取り込む</Button
 		>

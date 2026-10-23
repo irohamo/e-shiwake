@@ -483,3 +483,21 @@ input[type='date']::-webkit-calendar-picker-indicator {
 		white-space: pre-wrap;
 	}
 }
+
+/* サーバー版の入力・承認操作を指で押せる大きさにする。 */
+.server-workspace :is(button, select, input:not([type='checkbox']), textarea) {
+	min-height: 2.75rem;
+}
+.server-workspace :is(select, fieldset, article) {
+	min-width: 0;
+	max-width: 100%;
+}
+.server-workspace article {
+	overflow-wrap: anywhere;
+}
+@media (max-width: 639px) {
+	/* iPhoneで入力時に画面が自動拡大されるのを防ぐ。 */
+	main :is(input:not([type='checkbox']), select, textarea, [data-slot='select-trigger']) {
+		font-size: 1rem;
+	}
+}

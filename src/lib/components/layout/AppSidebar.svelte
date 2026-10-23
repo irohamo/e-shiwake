@@ -25,7 +25,12 @@
 	const fiscalYear = useFiscalYear();
 
 	// パス比較用のヘルパー（ベースパスを除去して比較）
-	const pathname = $derived(page.url.pathname.replace(base, '') || '/');
+	const pathname = $derived(
+		(page.url.pathname.startsWith(base)
+			? page.url.pathname.slice(base.length)
+			: page.url.pathname
+		).replace(/\/$/, '') || '/'
+	);
 
 	// 未エクスポート警告の状態
 	let unexportedCount = $state(0);

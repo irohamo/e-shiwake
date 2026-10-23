@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import BusinessInfoCard from '$lib/components/data/BusinessInfoCard.svelte';
 	import CapacityCard from '$lib/components/data/CapacityCard.svelte';
 	import LlmProviderCard from '$lib/components/data/LlmProviderCard.svelte';
@@ -71,34 +72,49 @@
 			<Settings2 class="size-6" />
 			設定
 		</h1>
-		<p class="text-sm text-muted-foreground">事業者情報と証憑保存の設定</p>
+		<p class="text-sm text-muted-foreground">事業者情報・AIアシスタント・証憑保存の設定</p>
 	</div>
 
+	<nav aria-label="設定項目" class="flex flex-wrap gap-2 text-sm">
+		<a class="rounded-lg border px-3 py-2 underline" href="#business">事業者情報</a>
+		<a class="rounded-lg border px-3 py-2 underline" href="#ai">AIアシスタント</a>
+		<a class="rounded-lg border px-3 py-2 underline" href="#storage">証憑の保存先</a>
+		<a class="rounded-lg border px-3 py-2 underline" href="#capacity">容量・自動削除</a>
+	</nav>
+	<p class="text-sm text-muted-foreground">
+		バックアップ・復元・データ出力は<a class="underline" href="{base}/data">データ管理</a
+		>から行えます。
+	</p>
+
 	<!-- 事業者情報 -->
-	<BusinessInfoCard />
+	<section id="business" class="scroll-mt-44"><BusinessInfoCard /></section>
 
 	<!-- AI アシスタント（LLM プロバイダ） -->
-	<LlmProviderCard />
+	<section id="ai" class="scroll-mt-44"><LlmProviderCard /></section>
 
 	<!-- 証憑保存先設定 -->
-	<StorageSettingsCard
-		bind:directoryHandle
-		bind:directoryName
-		{isFileSystemSupported}
-		{unexportedCount}
-		{availableYears}
-		ondirectorychange={handleDirectoryChange}
-		onstorageusagechange={handleStorageUsageChange}
-	/>
+	<section id="storage" class="scroll-mt-44">
+		<StorageSettingsCard
+			bind:directoryHandle
+			bind:directoryName
+			{isFileSystemSupported}
+			{unexportedCount}
+			{availableYears}
+			ondirectorychange={handleDirectoryChange}
+			onstorageusagechange={handleStorageUsageChange}
+		/>
+	</section>
 
 	<!-- ストレージ使用量 -->
-	<CapacityCard
-		{storageMode}
-		{isFileSystemSupported}
-		bind:storageUsage
-		bind:autoPurgeEnabled
-		{retentionDays}
-		{availableYears}
-		bind:unexportedCount
-	/>
+	<section id="capacity" class="scroll-mt-44">
+		<CapacityCard
+			{storageMode}
+			{isFileSystemSupported}
+			bind:storageUsage
+			bind:autoPurgeEnabled
+			{retentionDays}
+			{availableYears}
+			bind:unexportedCount
+		/>
+	</section>
 </div>

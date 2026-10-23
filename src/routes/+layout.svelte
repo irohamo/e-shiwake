@@ -5,6 +5,8 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import ChatDock from '$lib/components/chat/ChatDock.svelte';
 	import ChatPanel from '$lib/components/chat/ChatPanel.svelte';
+	import { navGroups } from '$lib/components/layout/sidebar-nav';
+	import ServerNav from '$lib/components/layout/ServerNav.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
 	import AppSidebar from '$lib/components/layout/AppSidebar.svelte';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
@@ -54,6 +56,23 @@
 	// ヘルプページかどうか（ヘルプページは個別にdescriptionを設定するため除外）
 	// route.id を使用することでプリレンダリング時も正しく判定できる
 	const isHelpPage = $derived($page.route.id?.startsWith('/help') ?? false);
+	const layoutTitle = $derived.by(() => {
+		const path =
+			($page.url.pathname.startsWith(base)
+				? $page.url.pathname.slice(base.length)
+				: $page.url.pathname
+			).replace(/\/$/, '') || '/';
+		const serverTitles: Record<string, string> = {
+			'/server': '仕訳帳',
+			'/server/review': '仕訳レビュー',
+			'/server/import': 'CSV取り込み',
+			'/login': 'ログイン'
+		};
+		const title =
+			serverTitles[path] ??
+			navGroups.flatMap((group) => group.items).find((item) => item.href === path)?.label;
+		return title ? `${title} | e-shiwake` : 'e-shiwake（電子仕訳）';
+	});
 
 	onMount(() => {
 		if (__ACCOUNTING_SERVER__) return;
@@ -195,7 +214,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>e-shiwake（電子仕訳）- フリーランス・個人事業主のための無料青色申告会計アプリ</title>
+	<title>{layoutTitle}</title>
 	<!-- ヘルプページは個別にdescriptionを設定するため、ここでは除外 -->
 	{#if !isHelpPage}
 		<meta
@@ -231,7 +250,10 @@
 </svelte:head>
 
 {#if __ACCOUNTING_SERVER__}
-	<main class="mx-auto max-w-6xl p-4 sm:p-8">{@render children()}</main>
+	<main class="server-workspace mx-auto max-w-6xl min-w-0 p-4 sm:p-8">
+		{#if $page.url.pathname.startsWith('/server')}<ServerNav />{/if}
+		{@render children()}
+	</main>
 {:else}
 	<Sidebar.Provider>
 		<AppSidebar />

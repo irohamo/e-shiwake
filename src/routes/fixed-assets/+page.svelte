@@ -136,7 +136,7 @@
 			<h1 class="text-2xl font-bold">固定資産台帳</h1>
 			<p class="text-sm text-muted-foreground">減価償却資産の管理と償却費計算を行います</p>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-2">
 			<Select.Root
 				type="single"
 				value={selectedYear.toString()}

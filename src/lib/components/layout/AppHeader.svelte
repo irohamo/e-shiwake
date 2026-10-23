@@ -4,21 +4,22 @@
 	import { page } from '$app/state';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
-	// ページタイトルのマッピング
-	const pageTitles: Record<string, string> = {
-		'/': '仕訳帳',
-		'/accounts': '勘定科目',
-		'/settings': '設定',
-		'/data': 'データ管理'
-	};
+	import { base } from '$app/paths';
+	import { navGroups } from './sidebar-nav';
 
-	function getTitle(pathname: string): string {
-		if (pageTitles[pathname]) return pageTitles[pathname];
-		if (pathname.startsWith('/help')) return 'ヘルプ';
-		return 'e-shiwake';
-	}
-
-	const currentTitle = $derived(getTitle(page.url.pathname));
+	const currentTitle = $derived.by(() => {
+		const path =
+			(page.url.pathname.startsWith(base)
+				? page.url.pathname.slice(base.length)
+				: page.url.pathname
+			).replace(/\/$/, '') || '/';
+		if (path.startsWith('/help')) return 'ヘルプ';
+		if (path.startsWith('/invoice/')) return '請求書';
+		return (
+			navGroups.flatMap((group) => group.items).find((item) => item.href === path)?.label ??
+			'e-shiwake'
+		);
+	});
 </script>
 
 <header

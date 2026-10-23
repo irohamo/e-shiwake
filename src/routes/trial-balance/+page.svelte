@@ -116,14 +116,14 @@
 
 <div class="space-y-6">
 	<div
-		class="sticky top-14 z-10 -mx-4 flex items-center justify-between border-b bg-background px-4 pt-4 pb-3 group-has-data-[collapsible=icon]/sidebar-wrapper:top-12"
+		class="sticky top-14 z-10 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b bg-background px-4 pt-4 pb-3 group-has-data-[collapsible=icon]/sidebar-wrapper:top-12"
 	>
 		<h1 class="flex items-center gap-2 text-2xl font-bold">
 			<Scale class="size-6" />
 			試算表
 		</h1>
 
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-2">
 			<Select.Root
 				type="single"
 				value={displayMode}
@@ -175,8 +175,8 @@
 	{:else}
 		<!-- 貸借一致チェック -->
 		<Card.Root class={trialBalance.isBalanced ? 'border-green-500/50' : 'border-red-500/50'}>
-			<Card.Content class="flex items-center justify-between p-4">
-				<div class="flex items-center gap-2">
+			<Card.Content class="flex flex-wrap items-center justify-between gap-3 p-4">
+				<div class="flex flex-wrap items-center gap-2">
 					{#if trialBalance.isBalanced}
 						<Check class="size-5 text-green-600" />
 						<span class="font-medium text-green-600">貸借一致</span>
@@ -185,7 +185,7 @@
 						<span class="font-medium text-red-600">貸借不一致</span>
 					{/if}
 				</div>
-				<div class="flex gap-8 text-sm">
+				<div class="flex flex-wrap gap-x-8 gap-y-2 text-sm">
 					<div>
 						<span class="text-muted-foreground">借方合計: </span>
 						<span class="font-mono font-medium">¥{trialBalance.totalDebit.toLocaleString()}</span>

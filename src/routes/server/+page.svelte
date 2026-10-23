@@ -61,7 +61,7 @@
 				requestId
 			);
 			reset();
-			message = '仕訳をSQLiteに保存しました';
+			message = '仕訳を保存しました。一覧で内容を確認できます。';
 			await refresh();
 		} catch (e) {
 			message = e instanceof Error ? e.message : '保存失敗';
@@ -78,7 +78,7 @@
 <svelte:head><title>仕訳帳 | e-shiwake Server</title></svelte:head>
 <header class="mb-8 flex flex-wrap items-center justify-between gap-4 border-b pb-5">
 	<div>
-		<p class="text-sm text-muted-foreground">e-shiwake / Server Mode</p>
+		<p class="text-sm text-muted-foreground">e-shiwake / サーバーの帳簿</p>
 		<h1 class="text-2xl font-bold">仕訳帳</h1>
 	</div>
 	<div class="flex gap-2">
@@ -88,15 +88,8 @@
 		>
 	</div>
 </header>
-<nav class="mb-5 flex flex-wrap gap-4 text-sm">
-	<a class="underline" href="/server/review">Review Inbox</a><a
-		class="underline"
-		href="/server/import">CSV取り込み</a
-	>
-</nav>
 <p class="mb-6 text-sm text-muted-foreground">
-	サーバーの帳簿を共有しています。保存する前に内容を確認してください。AIの提案はReview
-	Inboxで承認してから反映します。証憑ファイルは未対応です。
+	保存した仕訳はサーバーの帳簿に反映されます。AIの提案は「承認待ち」で内容を確認してから承認してください。
 </p>
 <div class="mb-6 grid gap-4 sm:grid-cols-3">
 	<div class="rounded-xl border p-4">
@@ -120,14 +113,21 @@
 				<label class="space-y-2 text-sm"
 					>取引日<Input type="date" bind:value={date} required /></label
 				>
-				<label class="space-y-2 text-sm">取引先<Input bind:value={vendor} maxlength={500} /></label>
 				<label class="space-y-2 text-sm"
-					>摘要<Input bind:value={description} required maxlength={2000} /></label
+					>取引先（任意）<Input bind:value={vendor} maxlength={500} /></label
+				>
+				<label class="space-y-2 text-sm"
+					>摘要（必須）<Input
+						placeholder="例：事務用品を購入"
+						bind:value={description}
+						required
+						maxlength={2000}
+					/></label
 				>
 			</div>
 			{#each lines as line, i (line.id)}
 				<div
-					class="grid items-end gap-2 rounded-lg bg-muted/40 p-3 sm:grid-cols-[5rem_1fr_9rem_7rem_4rem]"
+					class="grid items-end gap-2 rounded-lg bg-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-[5rem_minmax(0,1fr)_9rem_9rem_4rem]"
 				>
 					<label class="text-sm"
 						>貸借<select
@@ -187,13 +187,16 @@
 				>{busy ? '保存中…' : '確認して保存'}</Button
 			>
 		</fieldset>
-		<p role="status" class="text-sm">{message}</p>
+		<p role="status" class="text-sm whitespace-pre-wrap">{message}</p>
+		{#if !canSave && !loading}<p class="text-sm text-muted-foreground">
+				摘要・勘定科目を入力し、借方と貸方の金額を一致させると保存できます。
+			</p>{/if}
 	</form>
 </section>
 <section>
-	<h2 class="mb-4 text-lg font-semibold">保存済み仕訳</h2>
+	<h2 class="mb-4 text-lg font-semibold">保存済み仕訳（{journals.length}件）</h2>
 	{#if loading}<p>読込中…</p>{:else if journals.length === 0}<p class="text-muted-foreground">
-			仕訳はまだありません。
+			仕訳はまだありません。上の「新しい仕訳」から入力するか、「CSV取り込み」で明細を取り込んでください。
 		</p>{/if}
 	<div class="space-y-3">
 		{#each journals as journal (journal.id)}
@@ -208,7 +211,9 @@
 						<span
 							>{line.type === 'debit' ? '借方' : '貸方'}
 							{accounts.find((a) => a.code === line.accountCode)?.name}</span
-						><span>¥{line.amount.toLocaleString('ja-JP')}</span>
+						><span class="shrink-0 font-mono tabular-nums"
+							>¥{line.amount.toLocaleString('ja-JP')}</span
+						>
 					</p>{/each}
 			</article>
 		{/each}

@@ -19,6 +19,9 @@
 	let answers = $state<Record<string, string>>({});
 	let links = $state<Record<string, string>>({});
 	async function evidenceAction(body: unknown) {
+		if (busy || loading) return;
+		message = '';
+		error = '';
 		busy = true;
 		try {
 			const r = await fetch('/api/evidence/decision', {
@@ -27,9 +30,10 @@
 				body: JSON.stringify(body)
 			});
 			if (!r.ok) throw new Error('証憑操作に失敗しました。再読込してください');
-			await load();
+			if (await load()) message = '証憑の操作を保存しました。最新の内容を確認してください。';
 		} catch (e) {
-			message = e instanceof Error ? e.message : '操作失敗';
+			error =
+				e instanceof Error ? e.message : '操作に失敗しました。再読込してからやり直してください。';
 		} finally {
 			busy = false;
 		}
@@ -41,30 +45,58 @@
 	>([]);
 	let message = $state('');
 	let busy = $state(false);
+	let loading = $state(true);
+	let error = $state('');
 	let filter = $state('pending');
 	let editing = $state<string | null>(null);
 	let edited = $state<NewJournal | null>(null);
 	let confirmed = $state<Record<string, boolean>>({});
-	async function load() {
+	async function load(preserveConfirmations = false) {
+		loading = true;
+		error = '';
 		try {
-			[proposals, accounts, transactions] = await Promise.all([
+			const [nextProposals, nextAccounts, nextTransactions, response] = await Promise.all([
 				workflowRequest<Proposal[]>('proposals'),
 				createHttpAccountingStorage().listAccounts(),
-				workflowRequest<typeof transactions>('transactions')
+				workflowRequest<typeof transactions>('transactions'),
+				fetch('/api/evidence/inbox')
 			]);
-			const response = await fetch('/api/evidence/inbox');
-			if (response.ok) evidence = await response.json();
-			confirmed = {};
+			if (!response.ok) throw new Error('証憑を読み込めませんでした。再読込してください。');
+			const nextEvidence = await response.json();
+			// 内容・版が変わっていない候補の確認だけを保持する。
+			confirmed = preserveConfirmations
+				? Object.fromEntries(
+						nextProposals
+							.filter(
+								(p) =>
+									p.status === 'pending' &&
+									confirmed[p.id] &&
+									proposals.some((old) => old.id === p.id && old.version === p.version)
+							)
+							.map((p) => [p.id, true])
+					)
+				: {};
+			proposals = nextProposals;
+			accounts = nextAccounts;
+			transactions = nextTransactions;
+			evidence = nextEvidence;
+			return true;
 		} catch (e) {
-			message = e instanceof Error ? e.message : '読込失敗';
+			confirmed = {};
+			error = e instanceof Error ? e.message : '読み込めませんでした。再読込してください。';
+			return false;
+		} finally {
+			loading = false;
 		}
 	}
 	onMount(() => {
 		void load();
 	});
 	async function decide(p: Proposal, action: 'approve' | 'reject' | 'update') {
+		if (busy || loading) return;
 		busy = true;
 		message = '';
+		error = '';
 		try {
 			await workflowRequest('decision', {
 				id: p.id,
@@ -74,21 +106,23 @@
 			});
 			editing = null;
 			edited = null;
-			await load();
+			const refreshed = await load(true);
 			message =
 				action === 'approve'
 					? '承認して帳簿に転記しました'
 					: action === 'reject'
 						? '候補を却下しました'
 						: '候補を修正しました';
+			if (!refreshed) message += ' 最新の一覧を取得できませんでした。再読込してください。';
 		} catch (e) {
-			message = e instanceof Error ? e.message : '操作失敗';
+			error =
+				e instanceof Error ? e.message : '操作に失敗しました。再読込してからやり直してください。';
 		} finally {
 			busy = false;
 		}
 	}
 	const labels = {
-		draft: 'Draft',
+		draft: '下書き',
 		pending: '確認待ち',
 		approved: '承認済み',
 		rejected: '却下済み'
@@ -96,82 +130,49 @@
 </script>
 
 <svelte:head><title>仕訳レビュー | e-shiwake</title></svelte:head>
-<a href="/server" class="text-sm underline">← 仕訳帳へ</a>
+
 <header class="my-6 flex flex-wrap items-center justify-between gap-3">
 	<div>
-		<h1 class="text-2xl font-bold">Review Inbox</h1>
+		<h1 class="text-2xl font-bold">承認待ちの仕訳</h1>
 		<p class="text-sm text-muted-foreground">
 			AIの説明・取引明細は未検証の資料です。承認した仕訳だけが帳簿に反映されます。
 		</p>
 	</div>
-	<Button variant="outline" onclick={load}>再読込</Button>
+	<Button variant="outline" disabled={busy || loading} onclick={() => load()}>再読込</Button>
 </header>
-<section class="my-6 space-y-3 rounded border p-4">
-	<h2 class="text-xl font-semibold">Gmail証憑・まとめて確認</h2>
-	<p>証憑は未検証の資料です。未定義ルールは保留し、回答や無回答だけで承認しません。</p>
-	{#each evidence as e (e.id)}
-		<article class="space-y-2 rounded border p-3">
-			<p>証憑 {e.id} / version {e.version}</p>
-			<a class="underline" href={'/api/evidence/original?id=' + e.id}>原本をダウンロード</a>
-			<p class="text-xs break-all">SHA-256: {e.hash}</p>
-			<label
-				>関連候補<select bind:value={links[e.id]}
-					><option value="">選択してください</option
-					>{#each proposals.filter( (p) => ['pending', 'draft'].includes(p.status) ) as p (p.id)}<option
-							value={p.id}>{p.journal.date} / {p.journal.description}</option
-						>{/each}</select
-				></label
-			>
-			<Button
-				disabled={busy || !links[e.id]}
-				onclick={() =>
-					evidenceAction({ action: 'link', id: e.id, version: e.version, proposalId: links[e.id] })}
-				>候補に紐付けて再レビュー</Button
-			>
-			{#each e.questions as q (q.id)}
-				<p class="whitespace-pre-wrap">{q.text}</p>
-				{#if q.answer}<p class="whitespace-pre-wrap">
-						回答: {q.answer}
-					</p>{:else if q.version === e.version}
-					<label class="block"
-						>根拠を含む回答<textarea
-							class="block w-full rounded border p-2"
-							maxlength="4000"
-							bind:value={answers[q.id]}
-						></textarea></label
-					>
-					<Button
-						disabled={busy || !answers[q.id]?.trim()}
-						onclick={() =>
-							evidenceAction({
-								action: 'answer',
-								questionId: q.id,
-								version: e.version,
-								text: answers[q.id]
-							})}>回答を保存して再レビュー</Button
-					>
-				{:else}<p>古い質問（現在のversionの質問へ回答してください）</p>{/if}
-			{/each}
-		</article>
-	{/each}
-	{#if evidence.length === 0}<p>登録された証憑はありません。</p>{/if}
-</section>
+
+<p class="mb-4 text-sm text-muted-foreground">
+	確認待ち {proposals.filter((p) => p.status === 'pending').length}件 ·
+	<a href="#evidence-inbox" class="underline">証憑 {evidence.length}件を確認</a>
+</p>
 <label class="text-sm"
 	>表示<select bind:value={filter} class="ml-3 rounded border bg-background p-2"
-		><option value="pending">確認待ち</option><option value="draft">Draft</option><option
+		><option value="pending">確認待ち</option><option value="draft">下書き</option><option
 			value="approved">承認済み</option
 		><option value="rejected">却下済み</option></select
 	></label
 >
 <p role="status" class="my-4 text-sm">{message}</p>
-{#if proposals.filter((p) => p.status === filter).length === 0}<p
+{#if error}<div
+		role="alert"
+		class="my-4 rounded-lg border border-destructive p-3 text-sm text-destructive"
+	>
+		{error} 操作前に「再読込」で最新の内容を確認してください。
+	</div>{/if}
+{#if loading}<p role="status" class="my-6 text-muted-foreground">候補・証憑を読み込み中…</p>{/if}
+{#if !loading && !error && proposals.filter((p) => p.status === filter).length === 0}<p
 		class="my-6 text-muted-foreground"
 	>
-		該当する候補はありません。
+		{labels[
+			filter as keyof typeof labels
+		]}の候補はありません。CSVから取り込んだ明細は、AIが候補を作成するとここに表示されます。
 	</p>{/if}
 <div class="space-y-5">
 	{#each proposals.filter((p) => p.status === filter) as p (p.id)}
-		<article class="space-y-4 rounded-xl border p-4 sm:p-6">
+		<article
+			aria-label={`仕訳候補：${p.journal.description}`}
+			class="space-y-4 rounded-xl border bg-card p-4 [overflow-wrap:anywhere] sm:p-6"
+		>
 			<div class="flex flex-wrap justify-between gap-2">
 				<h2 class="text-lg font-semibold">{p.journal.description}</h2>
 				<span class="text-sm"
@@ -198,7 +199,7 @@
 						{accounts.find((a) => a.code === line.accountCode)?.name || line.accountCode} / {line.taxCategory
 							? TaxCategoryLabels[line.taxCategory]
 							: '税区分未指定'}</span
-					><span>¥{line.amount.toLocaleString()}</span>
+					><span class="shrink-0 font-mono tabular-nums">¥{line.amount.toLocaleString()}</span>
 				</p>{/each}
 			<section>
 				<h3 class="text-sm font-medium">提案根拠</h3>
@@ -223,31 +224,98 @@
 				{#if editing === p.id && edited}<ReviewJournalEditor
 						bind:journal={edited}
 						{accounts}
-					/><Button disabled={busy} onclick={() => decide(p, 'update')}
+					/><Button disabled={busy || loading} onclick={() => decide(p, 'update')}
 						>修正して確認待ちにする</Button
+					>
+					<Button
+						variant="ghost"
+						disabled={busy || loading}
+						onclick={() => {
+							editing = null;
+							edited = null;
+						}}>修正をキャンセル</Button
 					>{:else}
 					<div class="flex flex-wrap gap-2">
 						<Button
 							variant="outline"
-							disabled={busy}
+							disabled={busy || loading}
 							onclick={() => {
 								editing = p.id;
 								edited = structuredClone($state.snapshot(p.journal));
 							}}>修正</Button
-						><Button variant="outline" disabled={busy} onclick={() => decide(p, 'reject')}
-							>却下</Button
+						><Button
+							variant="outline"
+							disabled={busy || loading}
+							onclick={() => decide(p, 'reject')}>却下</Button
 						>
 					</div>
-					{#if p.status === 'pending'}<label class="flex items-center gap-2 text-sm"
+					{#if p.status === 'pending'}<label class="flex min-h-11 items-center gap-3 text-sm"
 							><input
 								type="checkbox"
+								disabled={busy || loading}
+								class="size-5 shrink-0"
 								bind:checked={confirmed[p.id]}
 							/>金額・科目・税区分・不明点を確認しました</label
-						><Button disabled={busy || !confirmed[p.id]} onclick={() => decide(p, 'approve')}
-							>承認して帳簿に反映</Button
+						><Button
+							disabled={busy || loading || !confirmed[p.id]}
+							onclick={() => decide(p, 'approve')}>承認して帳簿に反映</Button
 						>{/if}
 				{/if}
 			{/if}
 		</article>
 	{/each}
 </div>
+
+<details id="evidence-inbox" class="my-6 space-y-3 rounded-xl border p-4">
+	<summary class="cursor-pointer py-2 font-semibold">Gmail証憑の確認（{evidence.length}件）</summary
+	>
+	<p>証憑は未検証の資料です。未定義ルールは保留し、回答や無回答だけで承認しません。</p>
+	{#each evidence as e (e.id)}
+		<article class="space-y-2 rounded border p-3">
+			<p>証憑 <span class="break-all">{e.id}</span> / 第{e.version}版</p>
+			<a class="underline" href={'/api/evidence/original?id=' + e.id}>原本をダウンロード</a>
+			<p class="text-xs break-all">SHA-256: {e.hash}</p>
+			<label
+				>関連候補<select
+					class="mt-2 block w-full rounded border bg-background p-2"
+					bind:value={links[e.id]}
+					><option value="">選択してください</option
+					>{#each proposals.filter( (p) => ['pending', 'draft'].includes(p.status) ) as p (p.id)}<option
+							value={p.id}>{p.journal.date} / {p.journal.description}</option
+						>{/each}</select
+				></label
+			>
+			<Button
+				disabled={busy || loading || !links[e.id]}
+				onclick={() =>
+					evidenceAction({ action: 'link', id: e.id, version: e.version, proposalId: links[e.id] })}
+				>候補に紐付けて再レビュー</Button
+			>
+			{#each e.questions as q (q.id)}
+				<p class="whitespace-pre-wrap">{q.text}</p>
+				{#if q.answer}<p class="whitespace-pre-wrap">
+						回答: {q.answer}
+					</p>{:else if q.version === e.version}
+					<label class="block"
+						>根拠を含む回答<textarea
+							class="block w-full rounded border p-2"
+							maxlength="4000"
+							bind:value={answers[q.id]}
+						></textarea></label
+					>
+					<Button
+						disabled={busy || loading || !answers[q.id]?.trim()}
+						onclick={() =>
+							evidenceAction({
+								action: 'answer',
+								questionId: q.id,
+								version: e.version,
+								text: answers[q.id]
+							})}>回答を保存して再レビュー</Button
+					>
+				{:else}<p>古い質問（現在のversionの質問へ回答してください）</p>{/if}
+			{/each}
+		</article>
+	{/each}
+	{#if evidence.length === 0}<p>登録された証憑はありません。</p>{/if}
+</details>

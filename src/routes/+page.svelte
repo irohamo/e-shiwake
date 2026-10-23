@@ -474,7 +474,7 @@
 	<div
 		class="sticky top-14 z-10 -mx-4 space-y-3 border-b bg-background px-4 pt-4 pb-3 group-has-data-[collapsible=icon]/sidebar-wrapper:top-12"
 	>
-		<div class="flex items-center justify-between">
+		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div>
 				<h1 class="text-2xl font-bold">仕訳帳</h1>
 				<p class="text-sm text-muted-foreground">{fiscalYear.selectedYear}年度</p>
@@ -497,7 +497,8 @@
 				<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 				<Input
 					type="text"
-					placeholder="検索（摘要、取引先、勘定科目、金額、日付...）"
+					aria-label="仕訳を全年度から検索"
+					placeholder="全年度から検索（摘要・取引先・金額など）"
 					bind:value={searchQuery}
 					class="pr-10 pl-10"
 				/>
