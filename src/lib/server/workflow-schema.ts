@@ -82,3 +82,14 @@ export interface Proposal {
 	createdAt: string;
 	annotations: { kind: string; text: string; actor: string; at: string }[];
 }
+
+export const businessRatioSchema = z
+	.object({
+		proposalId: z.uuid(),
+		version: z.number().int().min(1),
+		lineId: z.uuid(),
+		businessRatio: z.number().int().min(1).max(100),
+		originalAmount: z.number().int().positive(),
+		reason: z.string().min(1).max(1000)
+	})
+	.strict();

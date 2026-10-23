@@ -261,3 +261,29 @@ export function cleanJournalLineForExport(line: JournalLine): JournalLine {
 	/* eslint-enable @typescript-eslint/no-unused-vars */
 	return clean;
 }
+
+/** Validate the canonical applied form shared by server proposals and review. */
+export function isBusinessRatioConsistent(lines: JournalLine[]): boolean {
+	const applied = lines.filter((line) => line._businessRatioApplied);
+	const generated = lines.filter((line) => line._businessRatioGenerated);
+	if (generated.some((line) => line.type !== 'debit' || line.accountCode !== OWNER_WITHDRAWAL_CODE))
+		return false;
+	if (!applied.length) return generated.length === 0;
+	if (generated.length !== 1) return false;
+	const credit = lines
+		.filter((line) => line.type === 'credit')
+		.reduce((sum, line) => sum + line.amount, 0);
+	return applied.every(
+		(line) =>
+			line.type === 'debit' &&
+			!line._businessRatioGenerated &&
+			Number.isInteger(line._originalAmount) &&
+			line._originalAmount! >= 0 &&
+			Number.isInteger(line._businessRatio) &&
+			line._businessRatio! >= 0 &&
+			line._businessRatio! <= 100 &&
+			line.amount === Math.floor((line._originalAmount! * line._businessRatio!) / 100) &&
+			generated[0].amount === line._originalAmount! - line.amount &&
+			credit === line._originalAmount
+	);
+}

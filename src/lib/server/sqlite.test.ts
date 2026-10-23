@@ -101,7 +101,7 @@ describe('Server canonical SQLite store', () => {
 			}).success
 		).toBe(false);
 		const ratio = journal();
-		ratio.lines[0]._businessRatio = 50;
+		ratio.lines[0]._businessRatio = 50.5;
 		await expect(store.createJournal(ratio, randomUUID())).rejects.toThrow();
 		expect(await store.listJournals()).toHaveLength(0);
 	});

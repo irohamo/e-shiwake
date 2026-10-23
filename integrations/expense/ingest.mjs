@@ -117,7 +117,9 @@ try {
 	);
 	const questions = [];
 	if (businessRatio !== 100)
-		questions.push(`家事按分（事業割合 ${businessRatio}%）の計算・承認方法を確認してください`);
+		questions.push(
+			`家事按分 ${businessRatio}% 適用済み（元の金額 ${p.amount}円）を確認してください`
+		);
 	if (!rule || rule.review) questions.push('用途・科目・税区分を確認してください');
 	if (!hasRaw) questions.push('原本MIME未提供：ペイロード写しを保管しています');
 	const taxRate = p.taxRate ?? rules.defaultTaxRate ?? 10;
@@ -149,7 +151,14 @@ try {
 					id: uuid(requestId + 'debit'),
 					type: 'debit',
 					accountCode: debit,
-					amount: p.amount,
+					amount: businessRatio === 100 ? p.amount : Math.floor((p.amount * businessRatio) / 100),
+					...(businessRatio === 100
+						? {}
+						: {
+								_businessRatioApplied: true,
+								_originalAmount: p.amount,
+								_businessRatio: businessRatio
+							}),
 					taxCategory:
 						taxRate === 10
 							? 'purchase_10'
@@ -159,6 +168,18 @@ try {
 									? 'out_of_scope'
 									: 'na'
 				},
+				...(businessRatio === 100
+					? []
+					: [
+							{
+								id: uuid(requestId + 'business-ratio-generated'),
+								type: 'debit',
+								accountCode: '3002', // OWNER_WITHDRAWAL_CODE (shared app canonical account)
+								amount: p.amount - Math.floor((p.amount * businessRatio) / 100),
+								taxCategory: 'na',
+								_businessRatioGenerated: true
+							}
+						]),
 				{
 					id: uuid(requestId + 'credit'),
 					type: 'credit',

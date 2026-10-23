@@ -142,29 +142,52 @@ test('host intake retry, unknown tax, exclusions and conflict behavior', async (
 			assert.equal((await run({ ...p, raw: Buffer.from('different').toString('base64') })).code, 1);
 			assert.equal(proposals.size, 6);
 		});
-		await t.test('vendor ratio defaults to 100 and preserves full amounts', async () => {
-			assert.equal(JSON.parse([...proposals.values()][0].text).businessRatio, 100);
-			for (const businessRatio of [0, 50, 100]) {
-				writeFileSync(
-					join(home, '.config/e-shiwake/vendor-rules.json'),
-					JSON.stringify({ vendors: { 'google cloud': { debit: '5006', businessRatio } } })
-				);
-				assert.equal((await run({ ...p, messageId: `ratio-${businessRatio}` })).code, 0);
-				const proposal = JSON.parse([...proposals.values()].at(-1).text);
-				assert.equal(proposal.businessRatio, businessRatio);
-				assert.equal(proposal.status, 'pending');
-				assert.deepEqual(
-					proposal.journal.lines.map((l) => l.amount),
-					[63, 63]
-				);
-				assert.deepEqual(
-					proposal.questions,
-					businessRatio === 100
-						? []
-						: [`家事按分（事業割合 ${businessRatio}%）の計算・承認方法を確認してください`]
-				);
+		await t.test(
+			'vendor ratio defaults to 100 and applies canonical integer proration',
+			async () => {
+				assert.equal(JSON.parse([...proposals.values()][0].text).businessRatio, 100);
+				for (const businessRatio of [0, 50, 100]) {
+					writeFileSync(
+						join(home, '.config/e-shiwake/vendor-rules.json'),
+						JSON.stringify({ vendors: { 'google cloud': { debit: '5006', businessRatio } } })
+					);
+					assert.equal((await run({ ...p, messageId: `ratio-${businessRatio}` })).code, 0);
+					const proposal = JSON.parse([...proposals.values()].at(-1).text);
+					assert.equal(proposal.businessRatio, businessRatio);
+					assert.equal(proposal.status, 'pending');
+					if (businessRatio !== 100) {
+						assert.equal(proposal.journal.lines[0]._businessRatioApplied, true);
+						assert.equal(proposal.journal.lines[0]._originalAmount, 63);
+						assert.equal(proposal.journal.lines[0]._businessRatio, businessRatio);
+						assert.equal(proposal.journal.lines[1]._businessRatioGenerated, true);
+						assert.equal(proposal.journal.lines[1].accountCode, '3002');
+						assert.equal(proposal.journal.lines[1].taxCategory, 'na');
+						const again = await run({ ...p, messageId: `ratio-${businessRatio}` });
+						assert.equal(again.code, 0);
+						assert.equal(again.duplicate, true);
+					} else {
+						assert.equal(proposal.journal.lines[0]._businessRatioApplied, undefined);
+					}
+
+					assert.deepEqual(
+						proposal.journal.lines.map((l) => l.amount),
+						businessRatio === 100
+							? [63, 63]
+							: [
+									Math.floor((63 * businessRatio) / 100),
+									63 - Math.floor((63 * businessRatio) / 100),
+									63
+								]
+					);
+					assert.deepEqual(
+						proposal.questions,
+						businessRatio === 100
+							? []
+							: [`家事按分 ${businessRatio}% 適用済み（元の金額 63円）を確認してください`]
+					);
+				}
 			}
-		});
+		);
 		await t.test('invalid vendor ratios fail before API calls', async () => {
 			for (const businessRatio of [-1, 101, 50.5, '50', null, true]) {
 				writeFileSync(

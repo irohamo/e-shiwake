@@ -1,3 +1,7 @@
+import { OWNER_WITHDRAWAL_CODE } from '$lib/constants/accounts';
+import { applyBusinessRatio, isBusinessRatioConsistent } from '$lib/utils/business-ratio';
+import { businessRatioSchema } from './workflow-schema';
+import { z } from 'zod';
 import { createHash, randomUUID } from 'node:crypto';
 import { ConflictError, type SqliteAccountingStorage } from './sqlite';
 import { parseCsv } from './csv-import';
@@ -171,6 +175,84 @@ export class WorkflowService {
 			})
 			.immediate();
 	}
+	setBusinessRatio(value: z.infer<typeof businessRatioSchema>, actor: 'agent' | 'owner') {
+		const input = businessRatioSchema.parse(value);
+		const { proposalId, version, lineId, businessRatio, originalAmount, reason } = input;
+		return this.db
+			.transaction(() => {
+				const p = this.db
+					.prepare('SELECT version,status,journal FROM proposals WHERE id=?')
+					.get(proposalId) as { version: number; status: string; journal: string } | undefined;
+				if (!p || p.version !== version || p.status !== 'pending')
+					throw new ConflictError('候補がないか変更済み、または確認待ちではありません');
+				const journal = JSON.parse(p.journal) as NewJournal;
+				const target = journal.lines.find((line) => line.id === lineId);
+				const account =
+					target &&
+					(this.db.prepare('SELECT data FROM accounts WHERE code=?').get(target.accountCode) as
+						{ data: string } | undefined);
+				const credits = journal.lines.filter((line) => line.type === 'credit');
+				if (
+					!target ||
+					target.type !== 'debit' ||
+					target._businessRatioGenerated ||
+					!account ||
+					JSON.parse(account.data).type !== 'expense' ||
+					credits.length !== 1
+				)
+					throw new ConflictError('対象は費用の借方行、貸方は1行にしてください');
+				const previousAmount = target.amount;
+				if (
+					!target._businessRatioApplied &&
+					previousAmount !== originalAmount &&
+					previousAmount !== Math.floor((originalAmount * businessRatio) / 100)
+				)
+					throw new ConflictError('元の金額と対象行の金額が一致しません');
+				journal.lines = journal.lines.filter((line) => !line._businessRatioGenerated);
+				delete target._businessRatioApplied;
+				delete target._originalAmount;
+				delete target._businessRatio;
+				delete target._businessRatioGenerated;
+				target.amount = originalAmount;
+				if (businessRatio !== 100) {
+					if (!this.db.prepare('SELECT 1 FROM accounts WHERE code=?').get(OWNER_WITHDRAWAL_CODE))
+						throw new ConflictError('事業主貸が未登録です');
+					journal.lines = applyBusinessRatio({
+						lines: journal.lines,
+						targetLineIndex: journal.lines.indexOf(target),
+						businessRatio
+					}).lines;
+				}
+				credits[0].amount = originalAmount;
+				const parsed = proposalSchema.shape.journal.safeParse(journal);
+				if (!parsed.success) throw new ConflictError('按分後の仕訳が不整合です');
+				this.db
+					.prepare('UPDATE proposals SET journal=?,business_ratio=?,version=version+1 WHERE id=?')
+					.run(JSON.stringify(parsed.data), businessRatio, proposalId);
+				this.db
+					.prepare(
+						'INSERT INTO proposal_annotations(proposal_id,kind,text,actor,at) VALUES(?,?,?,?,?)'
+					)
+					.run(
+						proposalId,
+						'classification',
+						`家事按分 ${businessRatio}%（元の金額 ${originalAmount}円）: ${reason}`,
+						actor,
+						new Date().toISOString()
+					);
+				this.audit(actor, 'proposal.business-ratio', proposalId, {
+					lineId,
+					businessRatio,
+					originalAmount,
+					previousAmount,
+					previousVersion: version,
+					reason
+				});
+				return { id: proposalId, version: version + 1 };
+			})
+			.immediate();
+	}
+
 	decide(
 		id: string,
 		version: number,
@@ -204,11 +286,20 @@ export class WorkflowService {
 				if (action === 'approve') {
 					if (p.status !== 'pending')
 						throw new ConflictError('Draftを修正・確認待ちにしてから承認してください');
-					if (p.business_ratio !== null && p.business_ratio !== 100)
+					const entry = JSON.parse(p.journal) as NewJournal;
+					const applied = entry.lines.filter((line) => line._businessRatioApplied);
+					if (
+						p.business_ratio !== null &&
+						p.business_ratio !== 100 &&
+						!(
+							applied.length &&
+							isBusinessRatioConsistent(entry.lines) &&
+							applied.every((line) => line._businessRatio === p.business_ratio)
+						)
+					)
 						throw new ConflictError(
 							'家事按分を含む候補は、計算済み仕訳の扱いを確認するまで承認できません'
 						);
-					const entry = JSON.parse(p.journal) as NewJournal;
 					const journalId = this.storage.postJournal(entry, id);
 					if (p.transaction_id) {
 						const result = this.db

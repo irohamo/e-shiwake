@@ -1,3 +1,4 @@
+import { isBusinessRatioConsistent } from '$lib/utils/business-ratio';
 import { z } from 'zod';
 import { validateJournal } from '$lib/utils/journal-validation';
 
@@ -29,7 +30,11 @@ export const journalSchema = z
 								'na'
 							])
 							.optional(),
-						memo: z.string().max(500).optional()
+						memo: z.string().max(500).optional(),
+						_businessRatioApplied: z.boolean().optional(),
+						_originalAmount: amountSchema.optional(),
+						_businessRatio: z.number().int().min(0).max(100).optional(),
+						_businessRatioGenerated: z.boolean().optional()
 					})
 					.strict()
 			)
@@ -38,6 +43,12 @@ export const journalSchema = z
 	})
 	.strict()
 	.superRefine((journal, ctx) => {
+		if (!isBusinessRatioConsistent(journal.lines)) {
+			ctx.addIssue({
+				code: 'custom',
+				message: '家事按分の金額・メタデータ・事業主貸行が一致しません'
+			});
+		}
 		const totals = journal.lines.reduce(
 			(sum, line) => {
 				sum[line.type] += BigInt(line.amount);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isBusinessRatioConsistent } from '$lib/utils/business-ratio';
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import ReviewJournalEditor from '$lib/components/journal/ReviewJournalEditor.svelte';
@@ -154,6 +155,7 @@
 	</p>{/if}
 <div class="space-y-5">
 	{#each proposals.filter((p) => p.status === filter) as p (p.id)}
+		{@const applied = p.journal.lines.find((line) => line._businessRatioApplied)}
 		<article
 			aria-label={`仕訳候補：${p.journal.description}`}
 			class="space-y-4 rounded-xl border bg-card p-4 [overflow-wrap:anywhere] sm:p-6"
@@ -194,9 +196,17 @@
 					<h3 class="font-medium">不明点・確認事項</h3>
 					{#each p.questions as q, i (i)}<p class="text-sm whitespace-pre-wrap">{q}</p>{/each}
 				</section>{/if}
-			{#if p.businessRatio !== undefined}<p class="text-sm">
-					事業利用割合: {p.businessRatio}%（按分計算は未適用。100%以外は承認不可）
-				</p>{/if}
+			{#if applied && isBusinessRatioConsistent(p.journal.lines)}
+				<p class="text-sm">
+					事業利用割合: {applied._businessRatio}%（元の金額 {applied._originalAmount}円、計上額 {applied.amount}円、按分適用済み）
+				</p>
+			{:else if p.businessRatio !== undefined}
+				<p class="text-sm">
+					事業利用割合: {p.businessRatio}%{p.businessRatio !== 100
+						? '（按分計算は未適用。100%以外は承認不可）'
+						: ''}
+				</p>
+			{/if}
 			{#if p.confidence !== undefined}<p class="text-sm text-muted-foreground">
 					AI参考信頼度: {p.confidence}%（自動承認には使用しません）
 				</p>{/if}

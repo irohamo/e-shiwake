@@ -316,3 +316,25 @@ it.each([
 ])('fails closed for %s', (_name, field) => {
 	expect(senderDkimPass([field], 'x.ai')).toBe(false);
 });
+
+it('keeps a consistent applied business ratio pending even without review questions', async () => {
+	const { s, e, id, proposalId, input } = setup({ ratio: 50 });
+	e.workflow.setBusinessRatio(
+		{
+			proposalId,
+			version: 1,
+			lineId: input.journal.lines[0].id,
+			businessRatio: 50,
+			originalAmount: 100,
+			reason: 'fixture'
+		},
+		'agent'
+	);
+	expect(e.link(id, 1, proposalId, 'agent').result).toBe('needs_answer');
+	expect(e.workflow.listProposals()[0]).toMatchObject({
+		status: 'pending',
+		businessRatio: 50,
+		questions: []
+	});
+	expect(await s.listJournals()).toHaveLength(0);
+});

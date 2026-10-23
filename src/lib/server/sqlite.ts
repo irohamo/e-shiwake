@@ -37,6 +37,12 @@ export class SqliteAccountingStorage implements AccountingStorage {
 		 amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount>=0 AND amount<=1000000000000),
 		 tax_category TEXT, memo TEXT, PRIMARY KEY(journal_id, position), UNIQUE(journal_id,id)
 		);
+		-- Additive metadata storage also upgrades existing books without changing journal_lines.
+		CREATE TABLE IF NOT EXISTS journal_line_business_ratio (
+		 journal_id TEXT NOT NULL, position INTEGER NOT NULL, metadata TEXT NOT NULL,
+		 PRIMARY KEY(journal_id, position),
+		 FOREIGN KEY(journal_id, position) REFERENCES journal_lines(journal_id, position)
+		);
 		CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor TEXT NOT NULL,
 		 action TEXT NOT NULL, entity_id TEXT NOT NULL, detail TEXT NOT NULL);
 		CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
@@ -81,10 +87,12 @@ export class SqliteAccountingStorage implements AccountingStorage {
 		return rows.map((row) => {
 			const lines = this.db
 				.prepare(
-					`SELECT id,type,account_code AS accountCode,amount,tax_category AS taxCategory,memo
-			 FROM journal_lines WHERE journal_id=? ORDER BY position`
+					`SELECT l.id,l.type,l.account_code AS accountCode,l.amount,l.tax_category AS taxCategory,l.memo,
+			 b.metadata AS businessRatioMetadata FROM journal_lines l
+			 LEFT JOIN journal_line_business_ratio b ON b.journal_id=l.journal_id AND b.position=l.position
+			 WHERE l.journal_id=? ORDER BY l.position`
 				)
-				.all(row.id) as JournalLine[];
+				.all(row.id) as (JournalLine & { businessRatioMetadata: string | null })[];
 			return {
 				id: row.id,
 				date: row.date,
@@ -94,8 +102,9 @@ export class SqliteAccountingStorage implements AccountingStorage {
 				createdAt: row.created_at,
 				updatedAt: row.created_at,
 				attachments: [],
-				lines: lines.map((line) => ({
+				lines: lines.map(({ businessRatioMetadata, ...line }) => ({
 					...line,
+					...JSON.parse(businessRatioMetadata ?? '{}'),
 					taxCategory: line.taxCategory ?? undefined,
 					memo: line.memo ?? undefined
 				}))
@@ -164,6 +173,25 @@ export class SqliteAccountingStorage implements AccountingStorage {
 						line.memo ?? null
 					)
 				);
+				const metadataInsert = this.db.prepare(
+					'INSERT INTO journal_line_business_ratio VALUES(?,?,?)'
+				);
+				journal.lines.forEach((line, index) => {
+					const {
+						_businessRatioApplied,
+						_originalAmount,
+						_businessRatio,
+						_businessRatioGenerated
+					} = line;
+					const metadata = {
+						_businessRatioApplied,
+						_originalAmount,
+						_businessRatio,
+						_businessRatioGenerated
+					};
+					if (Object.values(metadata).some((v) => v !== undefined))
+						metadataInsert.run(id, index, JSON.stringify(metadata));
+				});
 				this.db
 					.prepare('INSERT INTO audit_log(at,actor,action,entity_id,detail) VALUES(?,?,?,?,?)')
 					.run(now, 'owner', 'journal.create', id, JSON.stringify(journal));
