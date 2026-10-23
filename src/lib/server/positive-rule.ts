@@ -21,12 +21,15 @@ function headers(raw: Buffer) {
 		.toString('utf8')
 		.replace(/\r\n[ \t]+/g, ' ');
 	const result: Record<string, string> = {};
+	const authenticationResults: string[] = [];
 	for (const line of unfolded.split('\r\n')) {
 		const at = line.indexOf(':');
 		if (at < 1) return null;
 		const key = line.slice(0, at).toLowerCase();
 		if (['from', 'subject', 'message-id'].includes(key) && key in result) return null;
-		result[key] = line.slice(at + 1).trim();
+		const value = line.slice(at + 1).trim();
+		if (key === 'authentication-results') authenticationResults.push(value);
+		result[key] = value;
 	}
 	result.subject = (result.subject || '')
 		.replace(/\?=\s+=\?/g, '?==?')
@@ -41,7 +44,46 @@ function headers(raw: Buffer) {
 				'binary'
 			).toString('utf8');
 		});
-	return result;
+	return {
+		from: result.from,
+		subject: result.subject,
+		'message-id': result['message-id'],
+		authenticationResults
+	};
+}
+// Authentication-Results is supplied by the trusted mailbox collector, not verified
+// cryptographically here. DKIM-Signature alone never proves a successful check.
+function senderDkimPass(results: string[], domain: string) {
+	return results.some((result) => {
+		// Strip comments before splitting clauses, including semicolons inside comments.
+		let clean = result;
+		for (let n = 0; n < 10 && /\([^()]*\)/.test(clean); n++)
+			clean = clean.replace(/\([^()]*\)/g, ' ');
+		if (/[()"\\]/.test(clean)) return false;
+		return clean
+			.split(';')
+			.slice(1)
+			.some((clause) => {
+				const tokens = clause.trim().split(/\s+/);
+				if (tokens.shift()?.toLowerCase() !== 'dkim=pass') return false;
+				const properties = new Map<string, string>();
+				for (const token of tokens) {
+					const match = token.match(/^([a-z][a-z0-9_.-]*)=([^\s=;]+)$/i);
+					if (!match || properties.has(match[1].toLowerCase())) return false;
+					properties.set(match[1].toLowerCase(), match[2].toLowerCase());
+				}
+				// Prefer the actual signing domain. An explicit mismatching header.d cannot
+				// be rescued by header.i. Exact alignment deliberately excludes subdomains.
+				const signingDomain = properties.get('header.d');
+				if (signingDomain !== undefined) return signingDomain === domain;
+				const identity = properties.get('header.i');
+				return (
+					identity !== undefined &&
+					/^[^@]*@[^@]+$/.test(identity) &&
+					identity.slice(identity.lastIndexOf('@') + 1) === domain
+				);
+			});
+	});
 }
 // Called only inside EvidenceService.review's transaction, after original/hash checks.
 export function autoApproveEvidence(
@@ -112,7 +154,10 @@ export function autoApproveEvidence(
 	)
 		return null;
 	const from = h.from?.match(/^(?:[^<>]*<)?([^<>\s,;]+@[^<>\s,;]+)>?$/)?.[1].toLowerCase();
-	if (from !== rule.sender.toLowerCase()) return null;
+	if (!from || from !== rule.sender.toLowerCase()) return null;
+	const senderDomain = from.slice(from.lastIndexOf('@') + 1);
+	checks.senderDkimPass = senderDkimPass(h.authenticationResults, senderDomain);
+	if (!checks.senderDkimPass) return null;
 	if (journal.lines.length !== 2) return null;
 	const debit = journal.lines.find((l) => l.type === 'debit');
 	const credit = journal.lines.find((l) => l.type === 'credit');

@@ -13,6 +13,8 @@ function setup(
 		rules?: VendorRules;
 		noRules?: boolean;
 		original?: string;
+		authentication?: string;
+		sender?: string;
 		journal?: Partial<ProposalInput['journal']>;
 		ratio?: number;
 		questions?: string[];
@@ -39,7 +41,7 @@ function setup(
 	const subject = 'Google Cloud Platform & APIs: お支払いを受領しました';
 	const original =
 		options.original ||
-		`From: Google Payments <payments-noreply@google.com>\r\nMessage-ID: ${messageId}\r\nSubject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=\r\n\r\n100 JPY`;
+		`From: ${options.sender ?? 'Google Payments <payments-noreply@google.com>'}\r\n${options.authentication ?? 'Authentication-Results: mx.example; dkim=pass header.d=google.com\r\n'}Message-ID: ${messageId}\r\nSubject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=\r\n\r\n100 JPY`;
 	const evidence = e.ingest({
 		account: 'icloud',
 		messageId: createHash('sha256').update(messageId).digest('hex'),
@@ -181,4 +183,63 @@ it('rolls back link, journal and approval if the required auto audit fails', asy
 	expect(s.db.prepare('SELECT status FROM proposals WHERE id=?').get(proposalId)).toEqual({
 		status: 'pending'
 	});
+});
+
+it.each([
+	['missing result', ''],
+	[
+		'semicolon in comment',
+		'Authentication-Results: mx.example; spf=pass (note; dkim=pass header.d=google.com; ignored)\r\n'
+	],
+	['DKIM signature alone', 'DKIM-Signature: v=1; d=google.com; b=fixture\r\n'],
+	['failed DKIM', 'Authentication-Results: mx.example; dkim=fail header.d=google.com\r\n'],
+	['SPF alone', 'Authentication-Results: mx.example; spf=pass smtp.mailfrom=google.com\r\n'],
+	[
+		'unaligned signer',
+		'Authentication-Results: mx.example; dkim=pass header.d=attacker.example\r\n'
+	],
+	['suffix spoof', 'Authentication-Results: mx.example; dkim=pass header.d=google.com.evil\r\n'],
+	['subdomain', 'Authentication-Results: mx.example; dkim=pass header.d=mail.google.com\r\n'],
+	['missing domain', 'Authentication-Results: mx.example; dkim=pass\r\n'],
+	[
+		'comment spoof',
+		'Authentication-Results: mx.example; spf=pass (dkim=pass header.d=google.com)\r\n'
+	],
+	[
+		'conflicting identities',
+		'Authentication-Results: mx.example; dkim=pass header.d=evil.com header.i=@google.com\r\n'
+	],
+	[
+		'duplicate domain',
+		'Authentication-Results: mx.example; dkim=pass header.d=evil.com header.d=google.com\r\n'
+	],
+	[
+		'split methods',
+		'Authentication-Results: mx.example; dkim=fail header.d=google.com; spf=pass header.d=google.com\r\n'
+	],
+	['pass prefix', 'Authentication-Results: mx.example; dkim=pass.evil header.d=google.com\r\n']
+])('holds %s despite an otherwise matching sender and receipt', async (_name, authentication) => {
+	const { s, e, id, proposalId } = setup({ authentication });
+	expect(e.link(id, 1, proposalId, 'agent').result).toBe('needs_answer');
+	expect(await s.listJournals()).toHaveLength(0);
+	expect(s.db.prepare('SELECT status FROM proposals WHERE id=?').get(proposalId)).toEqual({
+		status: 'pending'
+	});
+	expect(
+		s.db.prepare("SELECT count(*) AS n FROM audit_log WHERE action='proposal.auto-approve'").get()
+	).toEqual({ n: 0 });
+});
+it.each([
+	'Authentication-Results: mx.example; dkim=pass header.i=@google.com\r\n',
+	'Authentication-Results: mx.example;\r\n\tdkim=pass (verified) header.d=GOOGLE.COM header.s=fixture\r\n',
+	'Authentication-Results: mx.example; dkim=pass header.d=google.com\r\nAuthentication-Results: other.example; spf=pass\r\n'
+])('approves aligned DKIM result: %s', async (authentication) => {
+	const { s, e, id, proposalId } = setup({ authentication });
+	expect(e.link(id, 1, proposalId, 'agent').result).toBe('approved');
+	expect(await s.listJournals()).toHaveLength(1);
+});
+it('holds a wrong sender even with valid Google DKIM', async () => {
+	const { s, e, id, proposalId } = setup({ sender: 'attacker@google.com' });
+	expect(e.link(id, 1, proposalId, 'agent').result).toBe('needs_answer');
+	expect(await s.listJournals()).toHaveLength(0);
 });

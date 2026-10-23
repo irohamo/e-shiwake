@@ -25,5 +25,7 @@ same key conflicts. The server's unique requestId protects proposal creation.
 Evidence linking is idempotent and cannot replace an existing link.
 
 Audit: ~/.local/state/e-shiwake/expense-audit.jsonl (private, no body or tokens).
-`auto:true` is an owner preference; the deployed hold policy still requires
-manual review at /server/review. Auto-approval requires separate branch review.
+`auto:true` permits server-side approval only with the owner-enabled positive
+policy, an exact sender match and an aligned DKIM pass in Authentication-Results,
+plus all receipt, metadata, accounting and deduplication checks. Other items stay
+in manual review at /server/review. See POSITIVE-RULE-REVIEW.md for trust limits.

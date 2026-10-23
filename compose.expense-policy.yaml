@@ -1,4 +1,4 @@
-# REVIEW ONLY. Do not apply until owner approves the positive-rule branch.
+# Owner-approved opt-in policy. Apply together with compose.yaml and compose.gmail.yaml.
 services:
   accounting:
     environment:
