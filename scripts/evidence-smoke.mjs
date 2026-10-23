@@ -43,11 +43,15 @@ const post = (path, body, token, cookie, csrf = origin) =>
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
+			// Rejected uploads may leave an unread body; use a fresh connection per assertion.
+			connection: 'close',
 			...(token ? { authorization: 'Bearer ' + token } : {}),
 			...(cookie ? { cookie } : {}),
 			origin: csrf
 		},
 		body: JSON.stringify(body)
+	}).catch((cause) => {
+		throw new Error(`POST ${path} failed`, { cause });
 	});
 try {
 	for (let n = 0; n < 100; n++) {

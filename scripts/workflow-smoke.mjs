@@ -28,6 +28,7 @@ const child = spawn(process.execPath, ['build'], {
 		HOST: '127.0.0.1',
 		PORT: '3111',
 		ACCOUNTING_DB_PATH: join(dir, 'test.sqlite'),
+		ACCOUNTING_EVIDENCE_PATH: join(dir, 'evidence'),
 		ACCOUNTING_PASSWORD_HASH_FILE: join(dir, 'owner.hash'),
 		ACCOUNTING_AGENT_TOKEN_HASH_FILE: join(dir, 'agent.hash')
 	},
