@@ -14,7 +14,11 @@
 		"lint": "prettier --check . && eslint .",
 		"test:unit": "vitest --project server",
 		"test:browser": "vitest --project client",
-		"test": "npm run test:unit -- --run"
+		"test": "npm run test:unit -- --run",
+		"start": "node build",
+		"test:server-e2e": "node scripts/server-smoke.mjs",
+		"test:workflow-e2e": "node scripts/workflow-smoke.mjs",
+		"test:evidence-e2e": "node scripts/evidence-smoke.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",
@@ -28,9 +32,10 @@
 		"@tailwindcss/forms": "^0.5.10",
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.1.17",
+		"@types/better-sqlite3": "^9.6.0",
 		"@types/node": "^22",
 		"@vite-pwa/sveltekit": "^1.1.0",
-		"@vitest/browser-playwright": "^4.0.15",
+		"@vitest/browser-playwright": "^4.1.12",
 		"bits-ui": "^2.14.4",
 		"clsx": "^2.1.1",
 		"eslint": "^9.39.1",
@@ -43,7 +48,7 @@
 		"prettier": "^3.7.4",
 		"prettier-plugin-svelte": "^3.4.0",
 		"prettier-plugin-tailwindcss": "^0.7.2",
-		"sharp": "^0.34.5",
+		"sharp": "^0.35.5",
 		"svelte": "^5.45.6",
 		"svelte-check": "^4.3.4",
 		"svelte-sonner": "^1.0.7",
@@ -54,14 +59,26 @@
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.48.1",
 		"vite": "^7.2.6",
-		"vitest": "^4.0.15",
+		"vitest": "^4.1.12",
 		"vitest-browser-svelte": "^2.0.1"
 	},
 	"dependencies": {
+		"@sveltejs/adapter-node": "^5.5.7",
+		"better-sqlite3": "^13.0.3",
+		"csv-parse": "^7.0.3",
 		"dexie": "^4.2.1",
 		"dompurify": "^3.2.4",
 		"jszip": "^3.10.1",
 		"marked": "^15.0.7",
-		"rxjs": "^7.8.2"
+		"rxjs": "^7.8.2",
+		"zod": "^4.6.7"
+	},
+	"overrides": {
+		"@sveltejs/kit": {
+			"cookie": "^0.7.2"
+		},
+		"@tailwindcss/typography": {
+			"postcss-selector-parser": "^7.1.7"
+		}
 	}
 }

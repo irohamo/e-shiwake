@@ -13,12 +13,14 @@ const pwaBase = base ? `${base}/` : '/';
 
 export default defineConfig({
 	define: {
-		__APP_VERSION__: JSON.stringify(pkg.version)
+		__APP_VERSION__: JSON.stringify(pkg.version),
+		__ACCOUNTING_SERVER__: JSON.stringify(process.env.PUBLIC_ACCOUNTING_MODE === 'server')
 	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
 		SvelteKitPWA({
+			disable: process.env.PUBLIC_ACCOUNTING_MODE === 'server',
 			srcDir: 'src',
 			mode: 'production',
 			strategies: 'generateSW',
@@ -138,7 +140,7 @@ export default defineConfig({
 					},
 
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
-					exclude: ['src/lib/server/**']
+					exclude: ['src/lib/server/**', '**/._*']
 				}
 			},
 
@@ -149,7 +151,7 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', '**/._*'],
 					setupFiles: ['src/lib/db/test-setup.ts']
 				}
 			}

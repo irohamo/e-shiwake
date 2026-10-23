@@ -1,0 +1,57 @@
+--- a/icloud-mail
++++ b/icloud-mail
+@@ -118,13 +118,15 @@
+     return validity
+ 
+ 
+-def fetch(client, uid, body=False):
++def fetch(client, uid, body=False, raw=False):
+     request = '(UID FLAGS BODY.PEEK[])' if body else '(UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)])'
+     data = checked(client.uid('FETCH', uid, request))
+     for item in data:
+         if isinstance(item, tuple):
+-            metadata, raw = item
+-            parsed = BytesParser(policy=policy.default).parsebytes(raw)
++            metadata, message_bytes = item
++            if raw:
++                return message_bytes
++            parsed = BytesParser(policy=policy.default).parsebytes(message_bytes)
+             match = re.search(rb'FLAGS \((.*?)\)', metadata)
+             flags = match[1].decode().split() if match else []
+             result = {'uid': uid, 'from': str(parsed.get('From', '')),
+@@ -166,6 +168,12 @@
+         return result
+     validity = select(client, args.folder, getattr(args, 'uidvalidity', None))
+     if args.command == 'read':
++        if args.raw or args.raw_base64:
++            original = fetch(client, args.uid, body=True, raw=True)
++            if args.raw:
++                return original
++            return {'folder': args.folder, 'uidvalidity': validity,
++                    'raw_base64': base64.b64encode(original).decode('ascii')}
+         return {'folder': args.folder, 'uidvalidity': validity, 'message': fetch(client, args.uid, body=True)}
+     criteria = ['UNSEEN' if args.unread else 'ALL']
+     if args.since:
+@@ -204,6 +212,9 @@
+         sub.add_argument('--folder', default='INBOX')
+         if command == 'read':
+             sub.add_argument('--uid', required=True, type=positive)
++            output = sub.add_mutually_exclusive_group()
++            output.add_argument('--raw', action='store_true', help='Write byte-exact original MIME to stdout')
++            output.add_argument('--raw-base64', action='store_true', help='Write JSON containing base64 original MIME')
+             sub.add_argument('--uidvalidity', type=positive, help='Value from list/search; rejects stale UIDs')
+         else:
+             sub.add_argument('--limit', type=int, default=20)
+@@ -224,7 +235,11 @@
+         if hasattr(args, 'limit') and not 1 <= args.limit <= 100:
+             raise ValueError('--limit must be between 1 and 100')
+         with connect() as client:
+-            emit(execute(args, client))
++            result = execute(args, client)
++            if isinstance(result, bytes):
++                sys.stdout.buffer.write(result)
++            else:
++                emit(result)
+     except (ValueError, FileNotFoundError) as exc:
+         print(json.dumps({'error': str(exc)}, ensure_ascii=False), file=sys.stderr)
+         sys.exit(1)

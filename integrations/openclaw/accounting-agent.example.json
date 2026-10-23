@@ -1,0 +1,40 @@
+{
+	"name": "会計担当",
+	"workspace": "~/.openclaw/workspace-accounting",
+	"skills": ["e-shiwake-accounting"],
+	"sandbox": {
+		"mode": "all",
+		"backend": "docker",
+		"scope": "agent",
+		"workspaceAccess": "ro",
+		"docker": {
+			"image": "node:24.22.1-bookworm-slim",
+			"network": "e-shiwake-agent",
+			"user": "1000:1000",
+			"readOnlyRoot": true,
+			"capDrop": ["ALL"],
+			"pidsLimit": 64,
+			"memory": "256m",
+			"cpus": 0.5,
+			"env": {
+				"ESHIWAKE_URL": "http://accounting:3000",
+				"ESHIWAKE_AGENT_TOKEN_FILE": "/agent/.secrets/agent-token"
+			}
+		}
+	},
+	"tools": {
+		"allow": ["read", "exec", "process"],
+		"elevated": {
+			"enabled": false
+		},
+		"exec": {
+			"host": "sandbox",
+			"security": "full"
+		},
+		"sandbox": {
+			"tools": {
+				"allow": ["read", "exec", "process"]
+			}
+		}
+	}
+}

@@ -1,0 +1,13 @@
+{
+	"name": "e-shiwake-gmail-ingest",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"oauth": "node oauth.mjs",
+		"once": "node fetch.mjs",
+		"test": "node --test *.test.mjs"
+	},
+	"dependencies": {
+		"googleapis": "^171.0.0"
+	}
+}
