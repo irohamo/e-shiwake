@@ -54,25 +54,117 @@ function headers(raw: Buffer) {
 }
 // Authentication-Results is supplied by the trusted mailbox collector, not verified
 // cryptographically here. DKIM-Signature alone never proves a successful check.
-function senderDkimPass(results: string[], domain: string) {
-	return results.some((result) => {
-		// Strip comments before splitting clauses, including semicolons inside comments.
-		let clean = result;
-		for (let n = 0; n < 10 && /\([^()]*\)/.test(clean); n++)
-			clean = clean.replace(/\([^()]*\)/g, ' ');
-		if (/[()"\\]/.test(clean)) return false;
-		return clean
-			.split(';')
-			.slice(1)
-			.some((clause) => {
-				const tokens = clause.trim().split(/\s+/);
-				if (tokens.shift()?.toLowerCase() !== 'dkim=pass') return false;
-				const properties = new Map<string, string>();
-				for (const token of tokens) {
-					const match = token.match(/^([a-z][a-z0-9_.-]*)=([^\s=;]+)$/i);
-					if (!match || properties.has(match[1].toLowerCase())) return false;
-					properties.set(match[1].toLowerCase(), match[2].toLowerCase());
+// Parse the complete field before considering any pass result. Delimiters inside
+// quoted strings/comments are data, never additional authentication clauses.
+function authenticationClauses(input: string) {
+	let at = 0;
+	let invalid = false;
+	function cfws() {
+		const start = at;
+		while (at < input.length) {
+			if (/[ \t]/.test(input[at])) {
+				at++;
+			} else if (input[at] === '(') {
+				at++;
+				let depth = 1;
+				while (at < input.length && depth) {
+					const ch = input[at++];
+					if (ch === '\\') {
+						if (at === input.length) invalid = true;
+						else at++;
+					} else if (ch === '(') depth++;
+					else if (ch === ')') depth--;
 				}
+				if (depth) invalid = true;
+			} else break;
+		}
+		return at > start;
+	}
+	function take(pattern: RegExp): string | null {
+		const match = input.slice(at).match(pattern);
+		if (!match) return null;
+		at += match[0].length;
+		return match[0].toLowerCase();
+	}
+	function value(): string | null {
+		if (input[at] !== '"') return take(/^[^\s=;()"\\]+/);
+		at++;
+		let decoded = '';
+		while (at < input.length) {
+			const ch = input[at++];
+			if (ch === '"') return decoded.toLowerCase();
+			if (ch === '\\') {
+				if (at === input.length) return null;
+				decoded += input[at++];
+			} else decoded += ch;
+		}
+		return null;
+	}
+	// Headers are already unfolded. Reject control characters, including bare CR/LF.
+	for (const ch of input) {
+		const code = ch.charCodeAt(0);
+		if ((code < 32 && code !== 9) || code === 127) return null;
+	}
+	cfws();
+	if (value() === null) return null; // authserv-id; no allowlist existed here.
+	if (cfws() && input[at] !== ';') {
+		if (!take(/^[0-9]+/)) return null;
+		cfws();
+	}
+	const clauses: { method: string; result: string; properties: Map<string, string> }[] = [];
+	while (at < input.length && !invalid) {
+		if (input[at++] !== ';') return null;
+		cfws();
+		const method = take(/^[a-z][a-z0-9_-]*/i);
+		if (!method) return null;
+		cfws();
+		if (method === 'none') return !invalid && !clauses.length && at === input.length ? [] : null;
+		// Method versions remain unsupported for positive matching.
+		let version = '';
+		if (input[at] === '/') {
+			at++;
+			cfws();
+			const number = take(/^[0-9]+/);
+			if (!number) return null;
+			version = '/' + number;
+			cfws();
+		}
+		if (input[at++] !== '=') return null;
+		cfws();
+		const result = take(/^[a-z][a-z0-9_-]*/i);
+		if (!result) return null;
+		const properties = new Map<string, string>();
+		while (at < input.length) {
+			const separated = cfws();
+			if (at === input.length || input[at] === ';') break;
+			if (!separated) return null;
+			let key = take(/^[a-z][a-z0-9_-]*/i);
+			if (!key) return null;
+			cfws();
+			if (input[at] === '.') {
+				at++;
+				cfws();
+				const property = take(/^[a-z][a-z0-9_-]*/i);
+				if (!property) return null;
+				key += '.' + property;
+				cfws();
+			} else if (key !== 'reason') return null;
+			if (input[at++] !== '=' || properties.has(key)) return null;
+			cfws();
+			const parsed = value();
+			if (parsed === null) return null;
+			properties.set(key, parsed);
+		}
+		clauses.push({ method: method + version, result, properties });
+	}
+	return invalid || !clauses.length ? null : clauses;
+}
+export function senderDkimPass(results: string[], domain: string) {
+	return results.some((result) => {
+		const clauses = authenticationClauses(result);
+		return (
+			clauses?.some(({ method, result, properties }) => {
+				if (method !== 'dkim' || result !== 'pass') return false;
 				// Prefer the actual signing domain. An explicit mismatching header.d cannot
 				// be rescued by header.i. Exact alignment deliberately excludes subdomains.
 				const signingDomain = properties.get('header.d');
@@ -83,7 +175,8 @@ function senderDkimPass(results: string[], domain: string) {
 					/^[^@]*@[^@]+$/.test(identity) &&
 					identity.slice(identity.lastIndexOf('@') + 1) === domain
 				);
-			});
+			}) ?? false
+		);
 	});
 }
 // Called only inside EvidenceService.review's transaction, after original/hash checks.

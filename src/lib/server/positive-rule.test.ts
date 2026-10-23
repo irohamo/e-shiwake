@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { SqliteAccountingStorage } from './sqlite';
 import { EvidenceService } from './evidence';
-import type { VendorRules } from './positive-rule';
+import { senderDkimPass, type VendorRules } from './positive-rule';
 import type { ProposalInput } from './workflow-schema';
 const active: { s: SqliteAccountingStorage; dir: string }[] = [];
 function setup(
@@ -231,6 +231,7 @@ it.each([
 	).toEqual({ n: 0 });
 });
 it.each([
+	'Authentication-Results: mx.example; dkim=pass header.d=google.com; spf=pass smtp.mailfrom="billing@google.com"\r\n',
 	'Authentication-Results: mx.example; dkim=pass header.i=@google.com\r\n',
 	'Authentication-Results: mx.example;\r\n\tdkim=pass (verified) header.d=GOOGLE.COM header.s=fixture\r\n',
 	'Authentication-Results: mx.example; dkim=pass header.d=google.com\r\nAuthentication-Results: other.example; spf=pass\r\n'
@@ -261,4 +262,57 @@ it.each([8, 0, 7])('holds a category that contradicts receipt rate %s', async (t
 	const { s, e, id, proposalId } = setup({ taxRate });
 	expect(e.link(id, 1, proposalId, 'agent').result).toBe('needs_answer');
 	expect(await s.listJournals()).toHaveLength(0);
+});
+
+// Synthetic fields only: no original email data belongs in these fixtures.
+it.each([
+	['unquoted pass', 'mx.example; dkim=pass header.d=x.ai'],
+	[
+		'quoted SPF value',
+		'mx.example; spf=pass smtp.mailfrom="billing@x.ai"; dkim=pass header.d=x.ai'
+	],
+	['quoted signing domain', 'mx.example; dkim=pass header.d="X.AI"'],
+	['quoted identity', 'mx.example; dkim=pass header.i="@x.ai"'],
+	['escaped domain character', String.raw`mx.example; dkim=pass header.d="x\.ai"`],
+	[
+		'escaped quote and backslash',
+		String.raw`mx.example; spf=pass reason="a\"b\\c; (data)" smtp.mailfrom="billing@x.ai"; dkim=pass header.d=x.ai`
+	],
+	[
+		'nested and escaped comments',
+		String.raw`mx.example (a (b; c) \) end); dkim (note) = (ok) pass header (a) . (b) d = (c) x.ai`
+	],
+	['deep comments', `mx.example; dkim=pass ${'('.repeat(20)}note${')'.repeat(20)} header.d=x.ai`],
+	['comments with quote', 'mx.example; dkim=pass (a " quote; ignored) header.d=x.ai'],
+	['authserv version', 'mx.example 1; dkim=pass header.d=x.ai']
+])('parses %s', (_name, field) => {
+	expect(senderDkimPass([field], 'x.ai')).toBe(true);
+});
+it.each([
+	['fail', 'mx.example; dkim=fail header.d="x.ai"'],
+	['none', 'mx.example; dkim=none header.d=x.ai'],
+	['neutral', 'mx.example; dkim=neutral header.d=x.ai'],
+	['temperror', 'mx.example; dkim=temperror header.d=x.ai'],
+	['permerror', 'mx.example; dkim=permerror header.d=x.ai'],
+	['mismatch', 'mx.example; dkim=pass header.d="evil.example"'],
+	['conflicting identity', 'mx.example; dkim=pass header.d="evil.example" header.i="@x.ai"'],
+	['duplicate property', 'mx.example; dkim=pass header.d="x.ai" header.d=x.ai'],
+	['case duplicate', 'mx.example; dkim=pass header.d="x.ai" HEADER.D=x.ai'],
+	['quote spoof', 'mx.example; spf=pass reason="ok; dkim=pass header.d=x.ai"'],
+	['comment spoof', String.raw`mx.example; spf=pass (a \) ; dkim=pass header.d=x.ai)`],
+	['unclosed quote', 'mx.example; dkim=pass header.d=x.ai; spf=pass smtp.mailfrom="unterminated'],
+	['unclosed comment', 'mx.example; dkim=pass header.d=x.ai (unterminated'],
+	['stray close comment', 'mx.example; dkim=pass header.d=x.ai )'],
+	['dangling escape', 'mx.example; dkim=pass header.d=x.ai reason="bad' + String.fromCharCode(92)],
+	['bare escape', String.raw`mx.example; dkim=pass header.d=x.ai reason=bad\escape`],
+	['adjacent quoted values', 'mx.example; dkim=pass header.d="x.ai""evil"'],
+	['junk after quoted value', 'mx.example; dkim=pass header.d="x.ai"evil'],
+	['trailing separator', 'mx.example; dkim=pass header.d=x.ai;'],
+	['malformed other clause', 'mx.example; dkim=pass header.d=x.ai; spf=pass garbage'],
+	['none after result', 'mx.example; dkim=pass header.d=x.ai; none'],
+	['no authserv id', '; dkim=pass header.d=x.ai'],
+	['control character', 'mx.example; dkim=pass header.d=x.ai reason="bad\nvalue"'],
+	['unsupported method version', 'mx.example; dkim/2=pass header.d=x.ai']
+])('fails closed for %s', (_name, field) => {
+	expect(senderDkimPass([field], 'x.ai')).toBe(false);
 });
