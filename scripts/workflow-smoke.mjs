@@ -200,6 +200,82 @@ try {
 	assert.equal(balance.isBalanced, true);
 	const bs = await (await agent.get('/api/agent/balance-sheet?year=2026')).json();
 	assert.equal(bs.totalAssets, bs.totalLiabilitiesAndEquity);
+	const question = '領収メールに税率の明記なし：請求書で税区分を確認してください';
+	const pending = {
+		...body,
+		requestId: randomUUID(),
+		transactionId: undefined,
+		questions: [question, '用途を確認']
+	};
+	r = await agent.post('/api/agent/proposals', { data: pending });
+	assert.equal(r.status(), 201);
+	const pendingId = (await r.json()).id;
+	const saved = (await (await agent.get('/api/agent/proposals')).json()).items.find(
+		(p) => p.id === pendingId
+	);
+	const corrected = structuredClone(saved.journal);
+	corrected.lines.find((l) => l.type === 'debit').taxCategory = 'purchase_10';
+	const resolution = {
+		id: pendingId,
+		version: saved.version,
+		question,
+		answer: 'オーナー決定: purchase_10',
+		journal: corrected
+	};
+	assert.equal(
+		(
+			await agent.post('/api/workflow/resolve-question', { headers: { origin }, data: resolution })
+		).status(),
+		401
+	);
+	assert.equal(
+		(
+			await context.request.post(origin + '/api/workflow/resolve-question', {
+				headers: { origin: 'http://invalid.example' },
+				data: resolution
+			})
+		).status(),
+		403
+	);
+	assert.equal(
+		(
+			await context.request.post(origin + '/api/workflow/resolve-question', {
+				headers: { origin },
+				data: { ...resolution, version: 0 }
+			})
+		).status(),
+		400
+	);
+	assert.equal(
+		(
+			await context.request.post(origin + '/api/workflow/resolve-question', {
+				headers: { origin },
+				data: resolution
+			})
+		).status(),
+		200
+	);
+	assert.equal(
+		(
+			await context.request.post(origin + '/api/workflow/resolve-question', {
+				headers: { origin },
+				data: resolution
+			})
+		).status(),
+		409
+	);
+	const resolved = (await (await agent.get('/api/agent/proposals')).json()).items.find(
+		(p) => p.id === pendingId
+	);
+	assert.equal(resolved.status, 'pending');
+	assert.equal(resolved.postedJournalId, undefined);
+	assert.deepEqual(resolved.questions, ['用途を確認']);
+	assert.equal(resolved.journal.lines.find((l) => l.type === 'debit').taxCategory, 'purchase_10');
+	assert.equal(
+		(await (await context.request.get(origin + '/api/accounting/journals')).json()).length,
+		1
+	);
+
 	assert.deepEqual(errors, []);
 	console.log(
 		'PASS: CSV UI preview/commit/reimport; Agent proposals/annotations only; injection treated as data; review edit/approve/reject; no preapproval posting; stale approval rejected; shared reports; mobile layout'

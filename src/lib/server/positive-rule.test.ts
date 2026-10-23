@@ -17,6 +17,7 @@ function setup(
 		sender?: string;
 		journal?: Partial<ProposalInput['journal']>;
 		ratio?: number;
+		taxRate?: number | null;
 		questions?: string[];
 	} = {}
 ) {
@@ -60,7 +61,7 @@ function setup(
 			messageId,
 			evidenceId: evidence.id,
 			rule: 'google cloud',
-			taxRate: 10,
+			taxRate: options.taxRate === undefined ? 10 : options.taxRate,
 			originalMime: true
 		}),
 		journal: {
@@ -240,6 +241,24 @@ it.each([
 });
 it('holds a wrong sender even with valid Google DKIM', async () => {
 	const { s, e, id, proposalId } = setup({ sender: 'attacker@google.com' });
+	expect(e.link(id, 1, proposalId, 'agent').result).toBe('needs_answer');
+	expect(await s.listJournals()).toHaveLength(0);
+});
+
+it.each([null, 0, 8, 10])(
+	'uses the owner default only for an unstated rate (%s)',
+	async (taxRate) => {
+		const { s, e, id, proposalId, input } = setup({ taxRate });
+		const taxCategory =
+			taxRate === 0 ? 'out_of_scope' : taxRate === 8 ? 'purchase_8' : 'purchase_10';
+		input.journal.lines[0].taxCategory = taxCategory;
+		e.workflow.decide(proposalId, 1, 'update', input.journal);
+		expect(e.link(id, 1, proposalId, 'agent').result).toBe('approved');
+		expect((await s.listJournals())[0].lines[0].taxCategory).toBe(taxCategory);
+	}
+);
+it.each([8, 0, 7])('holds a category that contradicts receipt rate %s', async (taxRate) => {
+	const { s, e, id, proposalId } = setup({ taxRate });
 	expect(e.link(id, 1, proposalId, 'agent').result).toBe('needs_answer');
 	expect(await s.listJournals()).toHaveLength(0);
 });

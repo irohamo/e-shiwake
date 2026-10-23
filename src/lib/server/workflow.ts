@@ -177,6 +177,35 @@ export class WorkflowService {
 			})
 			.immediate();
 	}
+	// Resolve one proposal question without reviewing evidence or approving/posting.
+	resolveQuestion(
+		id: string,
+		version: number,
+		question: string,
+		answer: string,
+		journal: NewJournal
+	) {
+		return this.db
+			.transaction(() => {
+				const p = this.db.prepare('SELECT questions FROM proposals WHERE id=?').get(id) as
+					{ questions: string } | undefined;
+				const questions: string[] = p ? JSON.parse(p.questions) : [];
+				if (!questions.includes(question)) throw new ConflictError('未解決の質問がありません');
+				const result = this.decide(id, version, 'update', journal);
+				this.db
+					.prepare('UPDATE proposals SET questions=? WHERE id=?')
+					.run(JSON.stringify(questions.filter((q) => q !== question)), id);
+				this.db
+					.prepare(
+						'INSERT INTO proposal_annotations(proposal_id,kind,text,actor,at) VALUES(?,?,?,?,?)'
+					)
+					.run(id, 'explanation', answer, 'owner', new Date().toISOString());
+				this.audit('owner', 'proposal.resolve-question', id, { version, question, answer });
+				return result;
+			})
+			.immediate();
+	}
+
 	annotate(proposalId: string, kind: string, text: string, actor: 'owner' | 'agent') {
 		return this.db
 			.transaction(() => {

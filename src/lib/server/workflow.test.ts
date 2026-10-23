@@ -207,3 +207,59 @@ it('rolls back a whole CSV batch when a later source ID conflicts', () => {
 	expect(() => w.commitPreview(p.id)).toThrow('内容');
 	expect(w.listTransactions()).toHaveLength(2);
 });
+
+it('resolves only the selected question with a journal correction, audit and no posting', async () => {
+	const s = open(),
+		w = new WorkflowService(s),
+		p = proposal();
+	p.questions = ['税率を確認', '用途を確認'];
+	const id = w.createProposal(p, 'agent');
+	p.journal.lines[0].taxCategory = 'purchase_10';
+	w.resolveQuestion(id, 1, p.questions[0], 'オーナー決定: purchase_10', p.journal);
+	const saved = w.listProposals().find((p) => p.id === id)!;
+	expect(saved).toMatchObject({ status: 'pending', version: 2, questions: ['用途を確認'] });
+	expect(saved.journal.lines[0].taxCategory).toBe('purchase_10');
+	expect(saved.annotations[0].text).toBe('オーナー決定: purchase_10');
+	expect(await s.listJournals()).toHaveLength(0);
+	expect(() => w.resolveQuestion(id, 1, '用途を確認', 'stale', p.journal)).toThrow();
+	expect(() => w.resolveQuestion(id, 2, 'missing', 'missing', p.journal)).toThrow();
+	expect(
+		s.db
+			.prepare("SELECT count(*) AS n FROM audit_log WHERE action='proposal.resolve-question'")
+			.get()
+	).toEqual({ n: 1 });
+});
+it('rolls back a question resolution if its audit fails', () => {
+	const s = open(),
+		w = new WorkflowService(s),
+		p = proposal();
+	p.questions = ['税率を確認'];
+	const id = w.createProposal(p, 'agent');
+	s.db.exec(
+		"CREATE TRIGGER fail_resolve BEFORE INSERT ON audit_log WHEN NEW.action='proposal.resolve-question' BEGIN SELECT RAISE(ABORT,'audit failure'); END"
+	);
+	expect(() => w.resolveQuestion(id, 1, p.questions[0], 'purchase_10', p.journal)).toThrow(
+		'audit failure'
+	);
+	expect(w.listProposals().find((p) => p.id === id)).toMatchObject({
+		version: 1,
+		questions: p.questions,
+		annotations: []
+	});
+});
+
+it('refuses question resolution on an already approved proposal', async () => {
+	const s = open(),
+		w = new WorkflowService(s),
+		p = proposal();
+	p.questions = ['税率を確認'];
+	const id = w.createProposal(p, 'agent');
+	w.decide(id, 1, 'approve');
+	expect(() => w.resolveQuestion(id, 2, p.questions[0], 'purchase_10', p.journal)).toThrow();
+	expect(w.listProposals().find((p) => p.id === id)).toMatchObject({
+		status: 'approved',
+		version: 2,
+		questions: p.questions
+	});
+	expect(await s.listJournals()).toHaveLength(1);
+});

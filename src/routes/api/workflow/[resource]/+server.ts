@@ -27,6 +27,22 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			if (!p.success) error(400, '候補形式を確認してください');
 			return json({ id: s.createProposal(p.data, 'owner') }, { status: 201 });
 		}
+		if (params.resource === 'resolve-question') {
+			const p = z
+				.object({
+					id: z.uuid(),
+					version: z.number().int().positive(),
+					question: z.string().min(1).max(500),
+					answer: z.string().trim().min(1).max(4000),
+					journal: proposalSchema.shape.journal
+				})
+				.strict()
+				.safeParse(body);
+			if (!p.success) error(400, '質問・回答・修正内容を確認してください');
+			return json(
+				s.resolveQuestion(p.data.id, p.data.version, p.data.question, p.data.answer, p.data.journal)
+			);
+		}
 		if (params.resource === 'decision') {
 			const p = decisionSchema.safeParse(body);
 			if (!p.success) error(400, '承認形式を確認してください');

@@ -59,3 +59,10 @@ chmod 600 ./backups/backup-YYYYMMDD.sqlite
 - POST `/api/accounting/journals`: `{requestId: UUID, journal: NewJournal}`。同じrequestId+同じ内容は同一ID。違う内容は409。整数円・実在科目・借貸一致が必須。証憑/按分/請求書リンクはPhase 1で拒否。
 
 変更はすべてOrigin一致が必須。APIキーやBearerでの所有者操作は不可。cookie/sessionを持たないOpenClawからのアクセスは401。TLS外のHTTPはlocalhost開発/SSH tunnel検証のみ。
+
+## 提案の質問解消（所有者API）
+
+POST `/api/workflow/resolve-question` は所有者sessionと同一Originが必須。
+`{id, version, question, answer, journal}` を渡すと、指定した未解決質問だけを除去し、
+修正済みjournal・回答annotation・監査記録を同一トランザクションで保存する。
+version競合・質問不存在は409。提案はpendingのままで、証憑再レビュー・自動承認・転記は行わない。

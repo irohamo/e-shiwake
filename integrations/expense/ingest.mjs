@@ -42,7 +42,7 @@ try {
 		!Number.isSafeInteger(p.amount) ||
 		p.amount <= 0 ||
 		p.amount > 1e12 ||
-		![null, 0, 8, 10].includes(p.taxRate)
+		![undefined, null, 0, 8, 10].includes(p.taxRate)
 	)
 		throw Error('invalid_amount_or_tax');
 	if (typeof p.receivedAt !== 'string' || Number.isNaN(Date.parse(p.receivedAt)))
@@ -113,10 +113,10 @@ try {
 		ingest
 	);
 	const questions = [];
-	if (p.taxRate === null)
-		questions.push('領収メールに税率の明記なし：請求書で税区分を確認してください');
 	if (!rule || rule.review) questions.push('用途・科目・税区分を確認してください');
 	if (!hasRaw) questions.push('原本MIME未提供：ペイロード写しを保管しています');
+	const taxRate = p.taxRate ?? rules.defaultTaxRate ?? 10;
+	if (![0, 8, 10].includes(taxRate)) throw Error('invalid_rule_tax');
 	const debit = rule?.debit || rules.fallbackDebit;
 	if (!/^\d{4}$/.test(debit)) throw Error('invalid_rule_account');
 	const proposal = {
@@ -129,7 +129,7 @@ try {
 			messageId: p.messageId,
 			evidenceId: e.id,
 			rule: key,
-			taxRate: p.taxRate,
+			taxRate: p.taxRate ?? null,
 			invoiceNo: p.invoiceNo || null,
 			originalMime: hasRaw
 		}),
@@ -146,11 +146,11 @@ try {
 					accountCode: debit,
 					amount: p.amount,
 					taxCategory:
-						p.taxRate === 10
+						taxRate === 10
 							? 'purchase_10'
-							: p.taxRate === 8
+							: taxRate === 8
 								? 'purchase_8'
-								: p.taxRate === 0
+								: taxRate === 0
 									? 'out_of_scope'
 									: 'na'
 				},
@@ -159,7 +159,7 @@ try {
 					type: 'credit',
 					accountCode: '3003',
 					amount: p.amount,
-					taxCategory: p.taxRate === null ? 'na' : 'out_of_scope'
+					taxCategory: 'out_of_scope'
 				}
 			]
 		}

@@ -32,3 +32,8 @@ structure and metadata binding but does not independently extract receipt values
 Currency is JPY; missing raw MIME, uncertain items, unknown vendors and partial
 business use require owner review. Existing pending proposals are not processed
 on startup; deployment does not automatically review or approve them.
+
+Owner decision (2026-10-23): an unstated receipt rate (metadata taxRate null)
+uses vendor-rules.json `defaultTaxRate: 10`, or 10 when omitted. Explicit receipt
+rates 0/8/10 take precedence. Missing/invalid metadata still prevents automatic
+approval. This is an accounting input default, not a determination of tax status.

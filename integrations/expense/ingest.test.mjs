@@ -56,6 +56,7 @@ test('host intake retry, unknown tax, exclusions and conflict behavior', async (
 			join(home, '.config/e-shiwake/vendor-rules.json'),
 			JSON.stringify({
 				fallbackDebit: '5024',
+				defaultTaxRate: 10,
 				vendors: { 'google cloud': { debit: '5006', auto: true }, ahamo: { skip: true } }
 			})
 		);
@@ -100,11 +101,37 @@ test('host intake retry, unknown tax, exclusions and conflict behavior', async (
 			assert.equal(j.lines[1].taxCategory, 'out_of_scope');
 			assert.match(first.requestId, /^[\da-f]{8}-[\da-f]{4}-5/);
 		});
-		await t.test('unknown tax is held without inventing a tax rate', async () => {
+		await t.test('unstated tax defaults to purchase_10 without a question', async () => {
 			assert.equal((await run({ ...p, messageId: 'unknown-tax', taxRate: null })).code, 0);
 			const proposal = JSON.parse([...proposals.values()][1].text);
-			assert.equal(proposal.journal.lines[0].taxCategory, 'na');
-			assert.equal(proposal.questions.length, 1);
+			assert.equal(proposal.journal.lines[0].taxCategory, 'purchase_10');
+			assert.equal(proposal.journal.lines[1].taxCategory, 'out_of_scope');
+			assert.equal(JSON.parse(proposal.rationale).taxRate, null);
+			assert.equal(proposal.questions.length, 0);
+		});
+		await t.test('explicit rates win and omitted tax retains other review questions', async () => {
+			for (const [taxRate, expected] of [
+				[0, 'out_of_scope'],
+				[8, 'purchase_8'],
+				[10, 'purchase_10'],
+				[undefined, 'purchase_10']
+			]) {
+				assert.equal(
+					(
+						await run({
+							...p,
+							messageId: `rate-${taxRate}`,
+							taxRate,
+							vendor: 'unknown',
+							raw: undefined
+						})
+					).code,
+					0
+				);
+				const proposal = JSON.parse([...proposals.values()].at(-1).text);
+				assert.equal(proposal.journal.lines[0].taxCategory, expected);
+				assert.equal(proposal.questions.length, 2);
+			}
 		});
 		await t.test('personal expense skips before any API calls', async () => {
 			const n = requests.length;
@@ -113,7 +140,7 @@ test('host intake retry, unknown tax, exclusions and conflict behavior', async (
 		});
 		await t.test('changed raw on the same key conflicts', async () => {
 			assert.equal((await run({ ...p, raw: Buffer.from('different').toString('base64') })).code, 1);
-			assert.equal(proposals.size, 2);
+			assert.equal(proposals.size, 6);
 		});
 		await t.test('non-loopback plaintext URL is rejected', async () => {
 			const n = requests.length;

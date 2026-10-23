@@ -11,6 +11,7 @@ export interface PositiveRule {
 }
 export interface VendorRules {
 	version: number;
+	defaultTaxRate?: 10;
 	vendors: Record<string, PositiveRule>;
 }
 function headers(raw: Buffer) {
@@ -161,12 +162,14 @@ export function autoApproveEvidence(
 	if (journal.lines.length !== 2) return null;
 	const debit = journal.lines.find((l) => l.type === 'debit');
 	const credit = journal.lines.find((l) => l.type === 'credit');
+	// Preserve the extracted rate; only an explicitly unknown receipt rate uses the owner default.
+	const taxRate = metadata.taxRate === null ? (rules.defaultTaxRate ?? 10) : metadata.taxRate;
 	const tax =
-		metadata.taxRate === 10
+		taxRate === 10
 			? 'purchase_10'
-			: metadata.taxRate === 8
+			: taxRate === 8
 				? 'purchase_8'
-				: metadata.taxRate === 0
+				: taxRate === 0
 					? 'out_of_scope'
 					: null;
 	if (
