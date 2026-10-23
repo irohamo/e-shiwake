@@ -150,7 +150,8 @@ try {
 	await page.getByLabel('摘要', { exact: true }).fill('修正済みの売上');
 	await page.getByRole('button', { name: '修正して確認待ちにする' }).click();
 	await page.getByRole('heading', { name: '修正済みの売上' }).waitFor();
-	assert.equal(await page.getByRole('button', { name: '承認して帳簿に反映' }).isDisabled(), true);
+	assert.equal(await page.getByRole('button', { name: '承認して帳簿に反映' }).isEnabled(), true);
+	assert.equal(await page.getByRole('checkbox').count(), 0);
 	if (process.env.SCREENSHOT_DIR) {
 		mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
 		await page.screenshot({
@@ -167,7 +168,6 @@ try {
 			fullPage: true
 		});
 	}
-	await page.getByLabel('金額・科目・税区分・不明点を確認しました').check();
 	await page.getByRole('button', { name: '承認して帳簿に反映' }).click();
 	await page.getByText('承認して帳簿に転記しました').waitFor();
 	let journals = await (await context.request.get(origin + '/api/accounting/journals')).json();

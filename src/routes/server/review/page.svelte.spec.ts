@@ -11,9 +11,7 @@ vi.mock('$lib/storage/http', () => ({
 }));
 
 let proposals: Proposal[];
-let changeOtherVersion = false;
 beforeEach(() => {
-	changeOtherVersion = false;
 	proposals = ['候補A', '候補B'].map((description, i) => ({
 		id: `proposal-${i}`,
 		version: 1,
@@ -46,7 +44,6 @@ beforeEach(() => {
 			const decision = body as { id: string; action: string };
 			const proposal = proposals.find((p) => p.id === decision.id)!;
 			proposal.status = 'approved';
-			if (changeOtherVersion) proposals[1].version++;
 			return { ok: true };
 		}
 		throw new Error('Unexpected request');
@@ -57,32 +54,53 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
-describe('承認待ちの確認操作', () => {
-	it('未確認では承認できず、別候補の承認後も同じ版の確認を保持する', async () => {
+describe('承認待ちの操作', () => {
+	it('チェックボックスなしで承認でき、残った候補もボタンだけで承認できる', async () => {
 		render(ReviewPage);
 		const a = page.getByRole('article', { name: '仕訳候補：候補A' });
 		const b = page.getByRole('article', { name: '仕訳候補：候補B' });
-		await expect.element(a.getByRole('button', { name: '承認して帳簿に反映' })).toBeDisabled();
-		await a.getByRole('checkbox').click();
-		await b.getByRole('checkbox').click();
+		await expect.element(a.getByRole('button', { name: '承認して帳簿に反映' })).toBeEnabled();
+		await expect.element(page.getByRole('checkbox')).not.toBeInTheDocument();
 		await a.getByRole('button', { name: '承認して帳簿に反映' }).click();
 		await expect.element(a).not.toBeInTheDocument();
-		await expect.element(b.getByRole('checkbox')).toBeChecked();
-		await expect.element(b.getByRole('button', { name: '承認して帳簿に反映' })).toBeEnabled();
-		await page.getByRole('button', { name: '再読込' }).click();
-		await expect.element(b.getByRole('checkbox')).not.toBeChecked();
+		expect(workflowRequest).toHaveBeenCalledWith('decision', {
+			id: 'proposal-0',
+			version: 1,
+			action: 'approve'
+		});
+		await b.getByRole('button', { name: '承認して帳簿に反映' }).click();
+		await expect.element(b).not.toBeInTheDocument();
+		expect(workflowRequest).toHaveBeenCalledWith('decision', {
+			id: 'proposal-1',
+			version: 1,
+			action: 'approve'
+		});
 	});
-	it('版が変わった候補は再確認を必要とする', async () => {
-		changeOtherVersion = true;
+	it('再読込後は最新の版を承認リクエストに送信する', async () => {
+		render(ReviewPage);
+		const b = page.getByRole('article', { name: '仕訳候補：候補B' });
+		await expect.element(b).toBeInTheDocument();
+		proposals[1].version = 2;
+		await page.getByRole('button', { name: '再読込' }).click();
+		await b.getByRole('button', { name: '承認して帳簿に反映' }).click();
+		await expect.element(b).not.toBeInTheDocument();
+		expect(workflowRequest).toHaveBeenCalledWith('decision', {
+			id: 'proposal-1',
+			version: 2,
+			action: 'approve'
+		});
+	});
+	it('承認APIの検証エラーを表示し、候補を承認済みにしない', async () => {
 		render(ReviewPage);
 		const a = page.getByRole('article', { name: '仕訳候補：候補A' });
-		const b = page.getByRole('article', { name: '仕訳候補：候補B' });
-		await a.getByRole('checkbox').click();
-		await b.getByRole('checkbox').click();
+		await expect.element(a).toBeInTheDocument();
+		vi.mocked(workflowRequest).mockRejectedValueOnce(new Error('事業利用割合を確認してください'));
 		await a.getByRole('button', { name: '承認して帳簿に反映' }).click();
-		await expect.element(a).not.toBeInTheDocument();
-		await expect.element(b.getByRole('checkbox')).not.toBeChecked();
-		await expect.element(b.getByRole('button', { name: '承認して帳簿に反映' })).toBeDisabled();
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent('事業利用割合を確認してください');
+		await expect.element(a).toBeInTheDocument();
+		await expect.element(a.getByRole('button', { name: '承認して帳簿に反映' })).toBeEnabled();
 	});
 	it('読込失敗を空状態と区別し、再読込で復帰できる', async () => {
 		vi.mocked(workflowRequest).mockRejectedValueOnce(new Error('接続を確認してください'));

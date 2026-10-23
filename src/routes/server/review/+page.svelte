@@ -50,8 +50,7 @@
 	let filter = $state('pending');
 	let editing = $state<string | null>(null);
 	let edited = $state<NewJournal | null>(null);
-	let confirmed = $state<Record<string, boolean>>({});
-	async function load(preserveConfirmations = false) {
+	async function load() {
 		loading = true;
 		error = '';
 		try {
@@ -63,26 +62,12 @@
 			]);
 			if (!response.ok) throw new Error('証憑を読み込めませんでした。再読込してください。');
 			const nextEvidence = await response.json();
-			// 内容・版が変わっていない候補の確認だけを保持する。
-			confirmed = preserveConfirmations
-				? Object.fromEntries(
-						nextProposals
-							.filter(
-								(p) =>
-									p.status === 'pending' &&
-									confirmed[p.id] &&
-									proposals.some((old) => old.id === p.id && old.version === p.version)
-							)
-							.map((p) => [p.id, true])
-					)
-				: {};
 			proposals = nextProposals;
 			accounts = nextAccounts;
 			transactions = nextTransactions;
 			evidence = nextEvidence;
 			return true;
 		} catch (e) {
-			confirmed = {};
 			error = e instanceof Error ? e.message : '読み込めませんでした。再読込してください。';
 			return false;
 		} finally {
@@ -106,7 +91,7 @@
 			});
 			editing = null;
 			edited = null;
-			const refreshed = await load(true);
+			const refreshed = await load();
 			message =
 				action === 'approve'
 					? '承認して帳簿に転記しました'
@@ -249,15 +234,8 @@
 							onclick={() => decide(p, 'reject')}>却下</Button
 						>
 					</div>
-					{#if p.status === 'pending'}<label class="flex min-h-11 items-center gap-3 text-sm"
-							><input
-								type="checkbox"
-								disabled={busy || loading}
-								class="size-5 shrink-0"
-								bind:checked={confirmed[p.id]}
-							/>金額・科目・税区分・不明点を確認しました</label
-						><Button
-							disabled={busy || loading || !confirmed[p.id]}
+					{#if p.status === 'pending'}<Button
+							disabled={busy || loading}
 							onclick={() => decide(p, 'approve')}>承認して帳簿に反映</Button
 						>{/if}
 				{/if}
